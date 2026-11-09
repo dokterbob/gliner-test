@@ -101,7 +101,7 @@ def main() -> None:
         runtime = CoreMLAdaptiveBoundaryExtractor(str(model_dir), fp16_compute_units=cu, fp32_compute_units=cu)
     load_ms = (time.perf_counter() - load_t0) * 1000
 
-    ent_schema, rel_schema, label_to_tag, threshold = load_schemas(args.schema, Schema)
+    ent_schema, relation_pass_schemas, label_to_tag, threshold = load_schemas(args.schema, Schema)
 
     timers: dict = {}
     process = psutil.Process()
@@ -111,7 +111,7 @@ def main() -> None:
     # adaptive runtime to build its internal CoreMLBoundaryExtractor so we
     # can instrument its model objects).
     for w in sample[: args.warmup]:
-        extract_window(runtime, ent_schema, rel_schema, label_to_tag, threshold, w["text"])
+        extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, w["text"])
     peak_rss = max(peak_rss, process.memory_info().rss)
 
     target = runtime._runtime if isinstance(runtime, CoreMLAdaptiveBoundaryExtractor) else runtime
@@ -120,7 +120,7 @@ def main() -> None:
     latencies = []
     t_start = time.perf_counter()
     for w in sample:
-        _, _, latency_ms = extract_window(runtime, ent_schema, rel_schema, label_to_tag, threshold, w["text"])
+        _, _, latency_ms = extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, w["text"])
         latencies.append(latency_ms)
         peak_rss = max(peak_rss, process.memory_info().rss)
     wall_s = time.perf_counter() - t_start

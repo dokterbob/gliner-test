@@ -10,14 +10,20 @@ Writes one shared-format prediction line per window to
 Entity/relation char offsets are within the *window* text (not the original
 chunk), matching windows.jsonl's own ``text`` field.
 
-Because the shared OntoNotes schema has 8 entity types + 4 relation types,
-and the Core ML bucket allows only 8 extraction queries total (each relation
-type costs 2 queries: head role + tail role), one ``extract()`` call cannot
-request both. Every window is therefore run through *two* passes:
-  - entities pass:  Schema().entities([8 OntoNotes labels])
-  - relations pass: Schema().relations([4 OntoNotes relation names])
-``latency_ms`` is the sum of both passes -- the real cost of getting full
-entities+relations for that window.
+schema/ontonotes.json (v2) has 8 entity types and 8 relation types split
+into ``relation_passes`` of <= 4 each (the Core ML relation head is R4 and
+the bucket allows only 8 extraction queries total; each relation type costs
+2 queries, head role + tail role). Every window therefore runs through
+``1 + len(relation_passes)`` ``extract()`` calls:
+  - an entities pass:       Schema().entities([8 OntoNotes labels])
+  - one pass per relation group (currently "affiliation", "social_place"):
+       Schema().relations([<= 4 relation *prompts* in that group])
+Each relation's ``prompt`` (not its canonical ``name``) is what's sent to
+the model; predictions are emitted under ``name``. ``latency_ms`` is the
+sum of all passes -- the real cost of getting full entities+relations for
+that window. (v1 schemas with a flat "relations" list and no
+"relation_passes"/"prompt" fields still work: they fall back to one
+"default" pass using ``name`` as the prompt.)
 """
 
 from __future__ import annotations
@@ -68,21 +74,32 @@ def build_runtime(model_dir: Path, precision: str, compute_units: str):
 
 
 def load_schemas(schema_path: Path, Schema):
+    """Build the entity schema plus one relation schema per ``relation_passes`` group.
+
+    Returns ``(ent_schema, relation_pass_schemas, label_to_tag, threshold)`` where
+    ``relation_pass_schemas`` is a list of ``(pass_name, schema, prompt_to_name)``.
+    """
     cfg = json.loads(schema_path.read_text())
     ent_labels = [e["label"] for e in cfg["entities"]]
     label_to_tag = {e["label"]: e["ontonotes"] for e in cfg["entities"]}
-    rel_names = [r["name"] for r in cfg["relations"]]
     threshold = cfg.get("threshold", 0.5)
     ent_schema = Schema().entities(ent_labels)
-    rel_schema = Schema().relations(rel_names)
-    return ent_schema, rel_schema, label_to_tag, threshold
+
+    pass_names = cfg.get("relation_passes") or ["default"]
+    relation_pass_schemas = []
+    for pass_name in pass_names:
+        rels_in_pass = [r for r in cfg["relations"] if r.get("pass", "default") == pass_name]
+        if not rels_in_pass:
+            continue
+        prompt_to_name = {r.get("prompt", r["name"]): r["name"] for r in rels_in_pass}
+        schema = Schema().relations(list(prompt_to_name.keys()))
+        relation_pass_schemas.append((pass_name, schema, prompt_to_name))
+    return ent_schema, relation_pass_schemas, label_to_tag, threshold
 
 
-def extract_window(runtime, ent_schema, rel_schema, label_to_tag, threshold, text):
+def extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, text):
     t0 = time.perf_counter()
     ent_out = runtime.extract(text, ent_schema, threshold=threshold, include_confidence=True, include_spans=True)
-    rel_out = runtime.extract(text, rel_schema, threshold=threshold, include_confidence=True, include_spans=True)
-    latency_ms = (time.perf_counter() - t0) * 1000
 
     entities = []
     for label, mentions in ent_out.get("entities", {}).items():
@@ -93,18 +110,22 @@ def extract_window(runtime, ent_schema, rel_schema, label_to_tag, threshold, tex
             )
 
     relations = []
-    for name, pairs in rel_out.get("relation_extraction", {}).items():
-        for p in pairs:
-            head, tail = p["head"], p["tail"]
-            score = float(head.get("confidence", tail.get("confidence", 0.0)))
-            relations.append(
-                {
-                    "name": name,
-                    "head": {"text": head["text"], "start": head["start"], "end": head["end"]},
-                    "tail": {"text": tail["text"], "start": tail["start"], "end": tail["end"]},
-                    "score": score,
-                }
-            )
+    for _pass_name, rel_schema, prompt_to_name in relation_pass_schemas:
+        rel_out = runtime.extract(text, rel_schema, threshold=threshold, include_confidence=True, include_spans=True)
+        for prompt, pairs in rel_out.get("relation_extraction", {}).items():
+            name = prompt_to_name.get(prompt, prompt)
+            for p in pairs:
+                head, tail = p["head"], p["tail"]
+                score = float(head.get("confidence", tail.get("confidence", 0.0)))
+                relations.append(
+                    {
+                        "name": name,
+                        "head": {"text": head["text"], "start": head["start"], "end": head["end"]},
+                        "tail": {"text": tail["text"], "start": tail["start"], "end": tail["end"]},
+                        "score": score,
+                    }
+                )
+    latency_ms = (time.perf_counter() - t0) * 1000
     return entities, relations, latency_ms
 
 
@@ -134,7 +155,7 @@ def main() -> None:
     runtime = build_runtime(args.model_dir, args.precision, args.compute_units)
     from gliner2 import Schema  # noqa: E402  (import after sys.path insert in build_runtime)
 
-    ent_schema, rel_schema, label_to_tag, threshold = load_schemas(args.schema, Schema)
+    ent_schema, relation_pass_schemas, label_to_tag, threshold = load_schemas(args.schema, Schema)
     load_ms = (time.perf_counter() - load_t0) * 1000
     print(f"[run_coreml] loaded {args.precision}/{args.compute_units} in {load_ms:.0f} ms", file=sys.stderr)
 
@@ -150,7 +171,7 @@ def main() -> None:
     with out.open("w") as fout:
         for w in windows:
             entities, relations, latency_ms = extract_window(
-                runtime, ent_schema, rel_schema, label_to_tag, threshold, w["text"]
+                runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, w["text"]
             )
             fout.write(
                 json.dumps(
