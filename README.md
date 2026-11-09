@@ -51,17 +51,24 @@ Details are in [`docs/coreml-findings.md`](docs/coreml-findings.md) and
   - **gliner25-rs** has no learned relation scorer, because the ONNX export ships no relation
     weights.
   - **JointIE** returns nothing for symmetric PERSON↔PERSON relations (a gliner2 2.0.0 bug).
-- **Speed** (CPU, three passes per window):
+- **Speed** (three passes per window):
 
   | Engine | p50 per window | Throughput |
   | --- | --- | --- |
-  | CoreML fp32 | 115 ms | 219 words/s |
-  | CoreML fp16-w8 | 69 ms | 367 words/s, 1.07 GB RSS |
+  | CoreML fp32, VM CPU | 115 ms | 219 words/s |
+  | CoreML fp16-w8, VM CPU | 69 ms | 367 words/s, 1.07 GB RSS |
+  | CoreML fp32, M4 Max GPU | 27 ms | 900 words/s, 2.2 GB RSS |
+  | CoreML fp16-w8, M4 Max ANE | 38 ms | 663 words/s, 0.87 GB RSS |
   | gliner25-rs fp32 | ~183 ms | — |
   | PyTorch fp32 | ~141 ms | — |
 
-  The compute-unit setting makes no difference in the VM, where every op runs on the CPU. The ANE
-  numbers still have to come from bare metal (see below).
+  The compute-unit setting makes no difference in the VM, where every op runs on the CPU. On the
+  bare-metal M4 Max it does:
+  - The GPU is fastest, and there fp16-w8 is no quicker than fp32.
+  - The ANE uses the least memory.
+  - `all` is slower than pinning either one.
+
+  See [`docs/coreml-findings.md`](docs/coreml-findings.md#bare-metal-benchmark-m4-max-300-window-sample-schema-v2).
 - **On localdb's technical docs**, the model finds real product and organisation names well. It
   over-tags code identifiers and generic technical nouns (`CLI`, `id`, `MarkdownSplitter`) as
   ORG/PERSON.
@@ -133,7 +140,8 @@ window text and OntoNotes tags as labels.
 
 ```sh
 # Per-op device placement. The W8 FP16 feature graph should land mostly on the ANE
-# (the model card reports 620/652 ops on an M5 Pro; this VM shows 0/651).
+# (the model card reports 620/652 ops on an M5 Pro; the M4 Max host measured 582/651;
+# this VM shows 0/651).
 uv run python scripts/dump_compute_plan.py --compute-units ane \
   --package gliner2_multi_extraction_features_w8_embedding_linear_fp16_L128_W64_Q8
 

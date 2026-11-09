@@ -1,8 +1,9 @@
 # GLiNER2.5 CoreML findings
 
 Environment: macOS 26.5 VM (Apple M4 Max, Virtual; 4 cores, 8GB RAM). CoreML sees only
-CPU and a paravirtualized GPU here — **no Neural Engine**. All numbers below are from this
-VM; the host ANE command list at the end is for the bare-metal run.
+CPU and a paravirtualized GPU here — **no Neural Engine**. Unless a section says otherwise,
+the numbers below are from this VM. The **Bare-metal benchmark** section has the same grid
+run on the host (Apple M4 Max, bare metal, with CPU, GPU and ANE all available).
 
 ## Windowing
 
@@ -56,13 +57,77 @@ fp32 p50 115.5ms / 218.8 words/s over 397.5s total; fp16-w8 p50 68.8ms / 366.7 w
 237.2s total — **fp16-w8 (W8-embedding feature graph + FP16 heads) is ~1.7x faster and uses
 ~225MB less peak RSS than fp32, at 0.966 entity / 0.942 relation F1 agreement with fp32** (see Quality below).
 
-**Compute-units choice (cpu/gpu/ane/all) made no measurable difference, for any precision,
-on this VM.** `scripts/dump_compute_plan.py` confirms why: every operation in every package,
+**In the VM, the compute-units choice (cpu/gpu/ane/all) made no measurable difference for
+any precision.** On bare metal it does; see the next section. `scripts/dump_compute_plan.py` confirms why: every operation in every package,
 even requesting `ALL`, has `MLCPUComputeDevice` as its only preferred/supported device here
 — e.g. the W8-embedding-linear FP16 feature graph (651 ops, closely matching the model
 card's 652-op FP16/ANE benchmark package) is 100% CPU on this VM. This matches the model
 card's own note that the FP32 feature graph "was assigned entirely to CPU" under forced
 CPU+NE on their test machine when no compatible NE path exists.
+
+## Bare-metal benchmark (M4 Max, 300-window sample, schema v2)
+
+The same `scripts/bench.py` grid, run twice on the bare-metal host. The table shows the second
+(warm) run. The two runs agree within ~2% on p50; the first run is used only for cold-start cost.
+
+| precision | units | p50 ms | p95 ms | words/s | load ms (warm) | peak RSS MB |
+|---|---|---|---|---|---|---|
+| fp32 | cpu | 95.2 | 98.6 | 270.1 | 576 | 1301 |
+| fp32 | gpu | 27.4 | 36.5 | 900.3 | 721 | 2179 |
+| fp32 | ane | 95.1 | 99.6 | 270.3 | 580 | 1302 |
+| fp32 | all | 27.7 | 38.3 | 891.0 | 712 | 2185 |
+| fp16-w8 | cpu | 62.4 | 66.7 | 409.1 | 603 | 1080 |
+| fp16-w8 | gpu | 27.3 | 36.4 | 900.4 | 658 | 9777 |
+| fp16-w8 | ane | 38.4 | 42.9 | 663.3 | 635 | 873 |
+| fp16-w8 | all | 41.6 | 46.9 | 612.5 | 689 | 9532 |
+| adaptive | cpu | 61.9 | 64.3 | 414.1 | ~0* | 1079 |
+| adaptive | gpu | 27.2 | 36.5 | 911.8 | ~0* | 9774 |
+| adaptive | ane | 38.3 | 42.2 | 667.7 | ~0* | 874 |
+| adaptive | all | 41.3 | 46.3 | 616.6 | ~0* | 9533 |
+
+\* Lazy construction, as in the VM table.
+
+**ANE placement** (`scripts/dump_compute_plan.py --compute-units ane` on the W8-embedding-linear
+FP16 feature graph): **582 of 651 ops are preferred on the ANE and 69 on the CPU.** 617 ops are
+ANE-supported. The model card reports 620/652 on an M5 Pro; the VM showed 0/651.
+
+Findings:
+
+1. **Compute units matter on bare metal, and the GPU is fastest for both precisions**: ~27 ms
+   p50 and ~900 words/s. That is 3.5× the CPU for fp32 and 2.3× for fp16-w8.
+2. **On the GPU, fp16-w8 is no faster than fp32** (27.3 vs 27.4 ms). fp32 is the reference
+   model (fp16-w8 agrees with it at only 0.966 entity / 0.942 relation F1), so on the GPU
+   fp16-w8 gives up accuracy for no gain.
+3. **fp32 + `ane` runs at CPU speed** (95 ms). An fp32 graph has no ANE path and falls back to
+   the CPU, as the model card describes. fp32 + `all` picks the GPU.
+4. **fp16-w8 + `ane` takes 38 ms: 1.6× faster than the CPU but 1.4× slower than the GPU.** Per
+   window, the feature graph takes 27.3 ms on the ANE vs 18.3 ms on the GPU. The relation head is
+   3.3× *slower* on the ANE than on the CPU (4.2 vs 1.3 ms/window). The likely cost is the 69
+   CPU-fallback ops and the ANE↔CPU handoffs around them.
+5. **fp16-w8 + `all` (41.6 ms) is slower than both `ane` and `gpu`.** The scheduler splits this
+   graph badly across devices. Pin the compute units explicitly; don't default to `all`.
+6. **Memory anomaly (unexplained):** fp16-w8 and adaptive on `gpu`/`all` peak at ~9.5–9.8 GB
+   RSS. That compares with 2.2 GB for fp32 on the GPU and 0.87 GB for fp16-w8 on the ANE, the
+   lowest in the grid. One hypothesis, not verified: the Metal path expands the W8 weights to
+   dense fp16, possibly once per specialization.
+7. **Cold start:** the first-ever load of fp16-w8 on `ane`/`all` took ~8 s for the on-device
+   ANE compile, vs ~0.6 s warm. In that first run, fp16-w8/ane also peaked at 2.1 GB RSS vs
+   0.87 GB warm. This cost is paid once per machine and model (and probably again after OS
+   updates).
+8. **Adaptive ≈ fp16-w8 in every cell.** Its fp32 fallback never fires on the hot path.
+9. **Python pre-processing and decoding are now a real share of the time.** They cost a flat
+   ~5–6 ms per window (~1.5–1.7 s per 900 calls), about 19–20% of GPU latency, which makes them
+   worth optimizing (the Rust side would avoid most of it).
+10. **The host CPU is 1.13–1.24× faster than the VM's** (fp16-w8 62 vs 71 ms; fp32 95 vs 118 ms).
+
+**Recommendation for localdb on macOS:**
+
+- **For throughput, use fp32 on the GPU.** It is the fastest and most accurate option, at
+  2.2 GB RSS.
+- **For low-memory or low-power background indexing, use fp16-w8 on the ANE**: 663 words/s at
+  0.87 GB.
+- **Avoid `all`**, which is slower than pinning `ane` or `gpu`.
+- **Avoid fp16-w8 on the GPU**: it runs no faster than fp32 and uses 4.5× the memory.
 
 ### Where time goes (latency breakdown, summed over passes)
 
@@ -210,7 +275,7 @@ can bolt onto this CoreML export without writing the scorer glue above.** Not pr
 further given this task's effort budget; the empirical repro above is the evidence trail if
 someone picks this up.
 
-## Host command list (bare-metal Apple Silicon, for maximum ANE residency)
+## Host command list (bare-metal Apple Silicon)
 
 ```bash
 # 1. Download + materialize (same on host; snapshot_download uses the default HF cache)
@@ -221,8 +286,8 @@ uv run python scripts/download_models.py
 uv run python scripts/compile_models.py
 
 # 3. Check real ANE op placement before trusting any latency number --
-#    on bare-metal this should show most ops on ANE for the W8 package
-#    (the model card reports 620/652 on an M5 Pro), unlike this VM (0/651)
+#    measured on the M4 Max host: 582/651 ops preferred on ANE, 69 on CPU
+#    (model card: 620/652 on an M5 Pro; this VM: 0/651)
 uv run python scripts/dump_compute_plan.py \
     --package gliner2_multi_extraction_features_w8_embedding_linear_fp16_L128_W64_Q8 \
     --compute-units ane
@@ -231,7 +296,8 @@ uv run python scripts/dump_compute_plan.py \
     --compute-units all
 
 # 4. Benchmark the full compute-units x precision grid for real --
-#    on bare-metal, cpu/gpu/ane/all should now *differ* (they didn't in the VM)
+#    on bare metal cpu/gpu/ane/all differ (they didn't in the VM); see the
+#    "Bare-metal benchmark" section for the results
 for units in cpu gpu ane all; do
   for prec in fp32 fp16-w8 adaptive; do
     uv run python scripts/bench.py --precision "$prec" --compute-units "$units" \
@@ -239,17 +305,17 @@ for units in cpu gpu ane all; do
   done
 done
 
-# 5. For maximum ANE residency specifically: fp16-w8 (the W8-embedding-linear FP16
-#    feature package) with --compute-units ane or all -- this is the precision/package
-#    pair the model card measured 620/652 ops on ANE with, and it's already our fastest
-#    option in the VM on CPU alone
-uv run python scripts/run_coreml.py --precision fp16-w8 --compute-units all
+# 5. Run the corpus with the measured best configs: fp32 on GPU for throughput,
+#    fp16-w8 on ANE for lowest memory. Don't use `all`: on the host it is slower
+#    than both `ane` and `gpu` for fp16-w8
+uv run python scripts/run_coreml.py --precision fp32 --compute-units gpu
+uv run python scripts/run_coreml.py --precision fp16-w8 --compute-units ane
 
 # 6. If any op still falls back to CPU on the host (check with step 3 again after a run),
 #    that's the model card's own caveat: some ops in the feature graph don't have an ANE
 #    kernel for this shape and silently fall back -- not a bug in this repo's code, a
-#    property of the exported graph. No action needed unless the fallback count is
-#    unexpectedly large (compare against the model card's own 620/652 baseline).
+#    property of the exported graph. Measured fallback on the M4 Max host: 69/651
+#    ops -- the likely cause of the relation head being slower on ANE than CPU.
 ```
 
 ## Blockers encountered
@@ -269,5 +335,6 @@ uv run python scripts/run_coreml.py --precision fp16-w8 --compute-units all
 
 - `data/windows.jsonl` — 3450 windows (gitignored, regenerate with `uv run python -m gliner_test.windowing`)
 - `data/preds/coreml-fp32-cpu.jsonl`, `data/preds/coreml-fp16-w8-cpu.jsonl` — full-corpus predictions, shared format
-- `data/bench/v2-<precision>-<units>.json` — 12 benchmark reports (schema v2, 300-window sample)
+- `data/bench/v2-<precision>-<units>.json` — 12 benchmark reports (schema v2, 300-window sample, VM)
+- `data/bench/host-<precision>-<units>.json` — 12 benchmark reports (same grid, bare-metal M4 Max; on the host only, not in the VM checkout)
 - `.cache/coreml/<revision>/` — materialized + compiled model cache (gitignored)
