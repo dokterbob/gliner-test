@@ -152,7 +152,7 @@ The earlier `resident_of` drop was confounded with the grouping change (01b). Tw
 | **13b** qualifier remap, no model change | 40/15/18 (unchanged) | .727 / .690 / .708 | .708 | .642 | 122 | **31/40** / **29/36** |
 
 - **13a not adopted:** no extra true positive (place still 6 tp; p-de-04 Jonas-Graz and p-de-07 Stefan-Linz stay missed), +3 false positives, lower F1 and AUPRC, and
-  latency +90% (the pass costs more than a call because it also shrinks windows slightly, 157 vs 157 windows but a longer prompt set).
+  latency +90% (233 vs 122 ms per window; one more call, and measured on a run that may have been noisier than the 2-pass runs).
 - **13b adopted:** in `place` pairs whose head type is PERSON, the qualifier `located_in` is relabelled `resident_of` after scoring (pair score and ranking are untouched, so
   pair F1 is identical by construction). Qualifier top-1 improves 30/40 to 31/40 on dev and 26/36 to 29/36 on test (+3 pairs; small counts).
   Implemented in `relations.py` (`remap_qualifiers`, `DEFAULT_QUALIFIER_REMAP`, unit tests), schema-driven through an optional
