@@ -1,0 +1,6 @@
+[submodule "third_party/GLiNER2"]
+	path = third_party/GLiNER2
+	url = https://github.com/fastino-ai/GLiNER2
+[submodule "third_party/gliner25-rs"]
+	path = third_party/gliner25-rs
+	url = https://github.com/dariofinardi/gliner25-rs
