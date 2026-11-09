@@ -99,6 +99,12 @@ def cmd_run(args):
                         str(exp_dir(cfg["id"]) / "raw.jsonl")], cwd=ROOT, check=True)
 
 
+def raw_file(cfg):
+    if cfg.get("raw_file"):
+        return ROOT / cfg["raw_file"]
+    return exp_dir(cfg.get("raw") or cfg["id"]) / "raw.jsonl"
+
+
 def pairs_for(cfg, raw_path, categories, apply_threshold=False):
     post = cfg["post"]
     mode = post.get("collapse", "max")
@@ -128,8 +134,8 @@ def prf(tp, fp, fn):
 
 
 def evaluate(cfg, split="dev", pool=True, thr_override=None):
-    eid = cfg["raw"] or cfg["id"] if cfg.get("raw") else cfg["id"]
-    raw = exp_dir(eid) / "raw.jsonl"
+    eid = cfg.get("raw") or cfg["id"]
+    raw = raw_file(cfg)
     schema_path = ROOT / (cfg.get("post_schema") or cfg["schema"])
     sch = R.load_schema(schema_path)
     if not sch["categories"]:
@@ -247,7 +253,7 @@ def tune_thresholds(cfg, split="dev", precision_target=0.8):
     sch = R.load_schema(ROOT / (cfg.get("post_schema") or cfg["schema"]))
     if not sch["categories"]:
         sch = R.load_schema(ROOT / "schema/ontonotes.json")
-    pairs = pairs_for(cfg, exp_dir(eid) / "raw.jsonl", sch["categories"])
+    pairs = pairs_for(cfg, raw_file(cfg), sch["categories"])
     gold = C.load_gold(ROOT / "eval/gold.jsonl", split)
     pcats, _ = C.load_pair_schema(ROOT / "schema/ontonotes.json")
     ev = C.PairEval({w: {"entities": [], "pairs": ps} for w, ps in pairs.items()}, gold, pcats, "overlap", True, True)
@@ -275,7 +281,7 @@ def calib_samples(cfg, split="dev"):
         sch = R.load_schema(ROOT / "schema/ontonotes.json")
     c2 = json.loads(json.dumps(cfg))
     c2["post"] = {k: v for k, v in cfg["post"].items() if k != "calibration"}
-    pairs = pairs_for(c2, exp_dir(eid) / "raw.jsonl", sch["categories"])
+    pairs = pairs_for(c2, raw_file(c2), sch["categories"])
     gold = {g["window_id"]: g for g in jl(ROOT / "eval/gold.jsonl") if split == "all" or g.get("split") == split}
     per_win = []
     for wid, ps in pairs.items():
