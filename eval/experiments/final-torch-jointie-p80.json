@@ -1,0 +1,21 @@
+{
+ "id": "final-torch-jointie-p80",
+ "desc": "FINAL torch-jointie: same, precision>=0.8 operating point (dev-tuned per category)",
+ "schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "raw_file": "data/preds/gold/torch-jointie.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/torch-jointie.json",
+  "cat_thresholds": {
+   "place": 0.95,
+   "per_per": 0.5,
+   "org_org": 0.35,
+   "per_org": 0.75
+  }
+ }
+}

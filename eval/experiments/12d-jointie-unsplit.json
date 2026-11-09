@@ -1,0 +1,15 @@
+{
+ "id": "12d-jointie-unsplit",
+ "desc": "JointIE 2.0.0 undirected, UNSPLIT passages",
+ "schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "raw_file": "data/exp/final/torch-jointie-unsplit.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/torch-jointie.json"
+ }
+}

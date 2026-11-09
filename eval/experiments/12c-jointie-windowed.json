@@ -1,0 +1,15 @@
+{
+ "id": "12c-jointie-windowed",
+ "desc": "JointIE 2.0.0 undirected, 64-word windows",
+ "schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "raw_file": "data/preds/gold/torch-jointie.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/torch-jointie.json"
+ }
+}

@@ -133,7 +133,7 @@ def prf(tp, fp, fn):
     return C.prf1(tp, fp, fn)
 
 
-def evaluate(cfg, split="dev", pool=True, thr_override=None):
+def evaluate(cfg, split="dev", pool=True, thr_override=None, kind=None):
     eid = cfg.get("raw") or cfg["id"]
     raw = raw_file(cfg)
     schema_path = ROOT / (cfg.get("post_schema") or cfg["schema"])
@@ -143,11 +143,15 @@ def evaluate(cfg, split="dev", pool=True, thr_override=None):
     cats_r = sch["categories"]
     gthr = cfg["post"].get("threshold", sch["threshold"])
     over = cfg["post"].get("cat_thresholds", {})
+    if not over and not cfg["post"].get("schema_thresholds"):
+        over = {c["id"]: gthr for c in cats_r}  # plain global threshold, ignoring the schema's per-category ones
     pairs = pairs_for(cfg, raw, cats_r)
     gold = C.load_gold(ROOT / "eval/gold.jsonl", split)
     if not pool:
         for rec in gold.values():
             rec["relations"] = [r for r in rec.get("relations", []) if r.get("source") != "pool"]
+    if kind:
+        gold = {w: r for w, r in gold.items() if r.get("kind") == kind}
     pcats, _ = C.load_pair_schema(ROOT / "schema/ontonotes.json")
 
     def rec_of(pdict, thr=False):
@@ -160,7 +164,7 @@ def evaluate(cfg, split="dev", pool=True, thr_override=None):
 
     ev_all = C.PairEval(rec_of(pairs), gold, pcats, "overlap", pool, True)
     ev_thr = C.PairEval(rec_of(pairs, True), gold, pcats, "overlap", pool, True)
-    row = {"id": cfg["id"], "desc": cfg.get("desc", ""), "split": split, "pool": pool, "engine": cfg["engine"],
+    row = {"id": cfg["id"], "desc": cfg.get("desc", ""), "split": split + (f"/{kind}" if kind else ""), "pool": pool, "engine": cfg["engine"],
            "threshold": gthr, "cat_thresholds": over}
     cat_f1 = []
     for v in ev_thr.views:
@@ -238,7 +242,7 @@ def write_md():
 def cmd_eval(args):
     for p in args.configs:
         cfg = load_cfg(p)
-        row = evaluate(cfg, args.split, not args.exclude_pool)
+        row = evaluate(cfg, args.split, not args.exclude_pool, kind=args.kind)
         print(fmt_row(row))
         if not args.no_record:
             with open(ROOT / "eval/experiments/results.jsonl", "a") as f:
@@ -333,6 +337,45 @@ def cmd_calibrate(args):
         print(f"5-fold dev  {m:<12} ECE(10)={C.ece(sc, lab):.3f}  logloss={nll:.3f}  n={len(sc)}")
 
 
+def cmd_cvthr(args):
+    """5-fold (by window) cross-validation on dev: per-category thresholds vs one global threshold, both tuned on 4 folds
+    (max F1 on the 0.05 grid, plateau middle) and scored pooled on the held-out folds. Uses calibrated scores of the config."""
+    cfg = load_cfg(args.config)
+    sch = R.load_schema(ROOT / (cfg.get("post_schema") or cfg["schema"]))
+    pairs = pairs_for(cfg, raw_file(cfg), sch["categories"])
+    gold = C.load_gold(ROOT / "eval/gold.jsonl", "dev")
+    pcats, _ = C.load_pair_schema(ROOT / "schema/ontonotes.json")
+    wids = sorted(gold)
+    grid = [i / 20 for i in range(1, 20)]
+
+    def ev_of(ws):
+        return C.PairEval({w: {"entities": [], "pairs": pairs.get(w, [])} for w in ws}, {w: gold[w] for w in ws},
+                          pcats, "overlap", True, True)
+
+    def best(ev, view):
+        sc = [(prf(*ev.counts(view, t))[2], t) for t in grid]
+        top = max(f for f, _ in sc)
+        pl = [t for f, t in sc if f >= top - 1e-9]
+        return pl[len(pl) // 2]
+
+    tot = {"global": [0, 0, 0], "percat": [0, 0, 0], "fixed0.5": [0, 0, 0]}
+    for k in range(5):
+        test = wids[k::5]
+        train = [w for w in wids if w not in test]
+        evtr, evte = ev_of(train), ev_of(test)
+        tg = best(evtr, "overall")
+        for name, thr in (("global", {c["id"]: tg for c in pcats}), ("percat", {c["id"]: best(evtr, c["id"]) for c in pcats}),
+                          ("fixed0.5", {c["id"]: 0.5 for c in pcats})):
+            for c in pcats:
+                a, b, d = evte.counts(c["id"], thr[c["id"]])
+                tot[name][0] += a
+                tot[name][1] += b
+                tot[name][2] += d
+    for name, (a, b, d) in tot.items():
+        p, r, f = prf(a, b, d)
+        print(f"{name:<9} tp/fp/fn {a}/{b}/{d}  P {p:.3f} R {r:.3f} F1 {f:.3f}   (sum over categories)")
+
+
 def cmd_tune(args):
     cfg = load_cfg(args.config)
     f1_thr, p_thr = tune_thresholds(cfg)
@@ -361,12 +404,16 @@ def main():
     e.add_argument("--split", default="dev", choices=["dev", "test", "all"])
     e.add_argument("--exclude-pool", action="store_true")
     e.add_argument("--no-record", action="store_true")
+    e.add_argument("--kind", choices=["sentence", "passage"], default=None)
     e.set_defaults(fn=cmd_eval)
     c = sub.add_parser("calibrate", help="fit isotonic + temperature on dev; print 5-fold dev ECE")
     c.add_argument("config")
     c.add_argument("--tag", required=True)
     c.add_argument("--min-samples", type=int, default=8)
     c.set_defaults(fn=cmd_calibrate)
+    v = sub.add_parser("cvthr", help="5-fold dev CV: per-category vs global threshold on a config's calibrated scores")
+    v.add_argument("config")
+    v.set_defaults(fn=cmd_cvthr)
     t = sub.add_parser("tune", help="print dev-tuned per-category thresholds for a config")
     t.add_argument("config")
     t.set_defaults(fn=cmd_tune)

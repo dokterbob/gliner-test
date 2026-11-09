@@ -1,0 +1,16 @@
+{
+ "id": "11-ece-temperature",
+ "desc": "calibration comparison on final fp32 raw: temperature (step 7; evaluate with --split test for ECE)",
+ "schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw_file": "data/preds/gold/coreml-fp32-cpu.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/coreml-fp32-cpu.json",
+  "cat_thresholds": {}
+ }
+}

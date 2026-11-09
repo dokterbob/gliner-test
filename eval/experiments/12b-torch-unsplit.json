@@ -1,0 +1,15 @@
+{
+ "id": "12b-torch-unsplit",
+ "desc": "torch independent, final schema, UNSPLIT passages",
+ "schema": "schema/ontonotes.json",
+ "engine": "torch",
+ "raw_file": "data/exp/final/torch-fp32-unsplit.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/torch-fp32.json"
+ }
+}

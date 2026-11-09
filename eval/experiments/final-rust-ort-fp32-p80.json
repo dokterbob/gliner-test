@@ -1,0 +1,21 @@
+{
+ "id": "final-rust-ort-fp32-p80",
+ "desc": "FINAL rust-ort-fp32: same, precision>=0.8 operating point (dev-tuned per category)",
+ "schema": "schema/ontonotes.json",
+ "engine": "rust-ort",
+ "raw_file": "data/preds/gold/rust-ort-fp32.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/rust-ort-fp32.json",
+  "cat_thresholds": {
+   "place": 0.95,
+   "per_per": 0.65,
+   "org_org": 0.05,
+   "per_org": 0.75
+  }
+ }
+}

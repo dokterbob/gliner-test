@@ -1,0 +1,15 @@
+{
+ "id": "11-ece-raw",
+ "desc": "calibration comparison on final fp32 raw: raw (step 7; evaluate with --split test for ECE)",
+ "schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw_file": "data/preds/gold/coreml-fp32-cpu.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "cat_thresholds": {}
+ }
+}

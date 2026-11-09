@@ -1,0 +1,16 @@
+{
+ "id": "final-torch-jointie-f1",
+ "desc": "FINAL torch-jointie: max/qualifiers/NMS, temperature calibration, F1 operating point",
+ "schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "raw_file": "data/preds/gold/torch-jointie.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/torch-jointie.json",
+  "cat_thresholds": {}
+ }
+}
