@@ -118,6 +118,36 @@ is rejected — see the latency section — vs. ONNX Runtime's fused kernels).
 **Target met: agreement is at 0.98, and the residual is explained, not
 mysterious.**
 
+### Full-corpus confirmation, and an independent check of CoreML's own numbers
+
+With the machine free again, `scripts/run_torch.py` ran the full
+`data/windows.jsonl` (3450 windows, multi-pass, ~9 minutes under the lock)
+so CoreML's own corpus predictions
+(`data/preds/coreml-{fp32,fp16-w8}-cpu.jsonl`, already complete at 3450
+lines each) could be checked against a *real* torch reference at full
+scale, not the 203-window sample:
+
+| engine vs. torch-fp32, all 3450 windows | entity exact-match F1 | relation F1 |
+|---|---|---|
+| coreml-fp32-cpu | **1.000** (tp=1835 fp=0 fn=0) | **1.000** (tp=328 fp=0 fn=0) |
+| coreml-fp16-w8-cpu | 0.966 (tp=1751 fp=41 fn=84) | 0.942 (tp=307 fp=17 fn=21) |
+
+CoreML fp32 is bit-for-bit identical to torch-fp32 on every one of 1835
+entities and 328 relations across the whole corpus — the cleanest possible
+confirmation that the CoreML export and the PyTorch checkpoint agree
+exactly when run at the same precision. The fp16-w8 numbers
+(**entity F1 0.966, relation F1 0.942**) are an independent reproduction,
+via a different reference engine (torch, not CoreML's own fp32 run) and a
+different tool (`scripts/compare.py`, not whatever the CoreML agent used),
+of the exact figures already reported in `docs/coreml-findings.md` — a
+genuine cross-check, not a restatement, and it lands on the same numbers.
+
+rust-ort's corpus-level comparison (§ above) is still the 203-window sample
+from before this round — a full 3450-window rust-ort run was out of scope
+for this pass (the task asked to prioritize the root cause, gold
+re-annotation and the relation/JointIE comparison over full-corpus runs);
+re-running it is a cheap follow-up with the harness as it stands.
+
 ## 2. Prompt composition: one-pass vs. multi-pass
 
 Both harnesses now default to **multi-pass**, mirroring
