@@ -206,6 +206,57 @@ gliner25-rs structurally cannot match gliner2/CoreML relation fidelity
 without a re-export that includes the relation-scorer fragment, independent
 of anything the crate's Rust code does.
 
+### All five engines against gold, side by side
+
+CoreML's earlier gold-set attempt (noted in previous revisions of this
+document) failed with a disk-full `ENOSPC` from the Core ML compiler; the
+CoreML agent has since added a persistent compiled-model cache
+(`.cache/coreml/<revision>/*.mlmodelc`) that fixes that, so both precisions
+now have real gold numbers:
+
+```
+uv run python scripts/run_coreml.py --windows eval/gold.jsonl --precision fp32 --compute-units cpu --out data/preds/gold/coreml-fp32-cpu.jsonl
+uv run python scripts/run_coreml.py --windows eval/gold.jsonl --precision fp16-w8 --compute-units cpu --out data/preds/gold/coreml-fp16-w8-cpu.jsonl
+```
+
+Entity exact-match micro-F1 against `eval/gold.jsonl`, all five engines:
+
+| engine | micro P | micro R | micro F1 | overlap F1 |
+|---|---|---|---|---|
+| coreml-fp32-cpu | 0.689 | 0.674 | 0.682 | 0.749 |
+| coreml-fp16-w8-cpu | 0.698 | 0.667 | 0.682 | 0.750 |
+| torch-fp32 (independent) | 0.689 | 0.674 | 0.682 | 0.749 |
+| rust-ort-fp32 | 0.676 | 0.689 | 0.683 | 0.749 |
+| torch-jointie | 0.609 | 0.670 | 0.638 | 0.702 |
+
+CoreML (either precision) and torch-fp32 land on **the same accuracy
+against gold**, label for label — fp32 CoreML's exact-match row is
+identical to torch's, and fp16-w8 is a rounding error away. rust-ort is
+likewise within noise of the other three on entities (the exact-match gap
+seen earlier in this document, before the byte/char fix, is gone — see §1).
+torch-jointie is the outlier, 4-6 points lower on both metrics — entirely
+attributable to the 15 symmetric-relation gold sentences producing 0
+*entities* under `optimizer="greedy"`'s harder failure mode in a few cases
+(§3), which drags down its entity recall alongside the relation recall. None
+of the four non-JointIE engines meaningfully disagree with gold or each
+other on entities once the offset bug is fixed; the real spread in this
+document is in relations, not entities.
+
+Relations, independent decoding, all engines (exact name+head+tail match,
+symmetric order-insensitive):
+
+| engine | tp | fp | fn | P | R | F1 |
+|---|---|---|---|---|---|---|
+| coreml-fp32-cpu | 38 | 149 | 11 | 0.203 | 0.776 | 0.322 |
+| coreml-fp16-w8-cpu | 38 | 147 | 11 | 0.205 | 0.776 | 0.325 |
+| torch-fp32 | 38 | 149 | 11 | 0.203 | 0.776 | 0.322 |
+| rust-ort-fp32 | 41 | 217 | 8 | 0.159 | 0.837 | 0.267 |
+| torch-jointie | 30 | 81 | 19 | 0.270 | 0.612 | 0.375 |
+
+rust-ort is the clear outlier on relations (more FPs, lower precision) —
+consistent with §3's finding that it is the one engine with no learned
+relation scorer behind its pairing at all.
+
 ### JointIE
 
 `gliner2.joint_ie.JointIE` (same checkpoint, `docs/references/gliner2-tutorial-15-joint-ie.md`)
@@ -219,6 +270,14 @@ clearly better than the much cheaper independent-decoding-plus-type-filter
 (0.46 on the same 5 types). JointIE's advantage is the graph-level
 guarantees it buys beyond type filtering (unique-head caps, no self-loops,
 cross-relation consistency), which this gold set is too small to stress.
+
+**CoreML's relation numbers are essentially identical to torch's**
+(`data/preds/gold/coreml-fp32-cpu.jsonl`: tp=38 fp=149 fn=11, bit-for-bit
+the same counts as torch-fp32) — expected, since the CoreML export ships
+the dedicated `gliner2_multi_relation_*.mlpackage` fragment that backs the
+same `SparseRelationScorer`-equivalent computation, unlike the ONNX export
+gliner25-rs depends on. fp16-w8 is close (tp=38 fp=147 fn=11), the small
+delta being ordinary quantization noise.
 
 **JointIE library limitation found, not ours to fix:** a symmetric relation
 whose head and tail are the **same single entity type** —
@@ -273,6 +332,8 @@ instruction not to change the shared file.
 | torch (gold, 84) | 84 | multi-pass | 7588 | 141.3 | 95 | 3458 MB |
 | torch (gold, 84) | 84 | one-pass | 5599 | 72.3 | 185 | 3458 MB |
 | torch-jointie (gold, 84) | 84 | 1 call/window, 5 relation types | 6449 | 70.8 | 189 | 3125 MB |
+| coreml-fp32-cpu (gold, 84) | 84 | 2 calls/window (entities, relations) | 909 | 118.2 | — | — |
+| coreml-fp16-w8-cpu (gold, 84) | 84 | 2 calls/window (entities, relations) | 896 | 71.0 | — | — |
 
 Torch loads 7–10x slower than the Rust/ONNX path (safetensors + Python
 import overhead vs. a handful of `mmap`'d ONNX sessions) but has lower
@@ -338,6 +399,12 @@ uv run python scripts/run_torch.py --windows eval/gold.jsonl \
 # PyTorch reference (JointIE)
 uv run python scripts/run_torch_jointie.py --windows eval/gold.jsonl \
   --out data/preds/gold/torch-jointie.jsonl
+
+# CoreML (persistent .cache/coreml/<revision>/*.mlmodelc avoids the earlier ENOSPC)
+uv run python scripts/run_coreml.py --windows eval/gold.jsonl --precision fp32 --compute-units cpu \
+  --out data/preds/gold/coreml-fp32-cpu.jsonl
+uv run python scripts/run_coreml.py --windows eval/gold.jsonl --precision fp16-w8 --compute-units cpu \
+  --out data/preds/gold/coreml-fp16-w8-cpu.jsonl
 
 # Comparison report
 uv run python scripts/compare.py --windows data/windows.jsonl \
