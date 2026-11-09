@@ -1,0 +1,3 @@
+{"id": "03e-coarse-only-b", "desc": "coarse-only wording b (based in/works for/affiliated with/relationship), 2 calls",
+ "schema": "eval/experiments/schemas/coarse-only-b.json", "engine": "coreml-fp32",
+ "flags": {}, "post": {"collapse": "max", "score_names": "detectors", "threshold": 0.5}}

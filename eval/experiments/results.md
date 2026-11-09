@@ -8,3 +8,8 @@ Cell format `tp/fp/fn`. All dev unless noted. overall = untyped, unordered pairs
 | 01b-v22 | dev | y | 0.5 | 0.6 | 0.672 | 0.634 | 0.635 | 0.498 | 0.195 | 0.312 | 0.75 | 0.727 | 0.75 | 39/26/19 | 29/39 | 159.8 | v2.2 grouping (4 calls), max collapse, thr 0.5 |
 | 02-arg005 | dev | y | 0.5 | 0.424 | 0.724 | 0.535 | 0.527 | 0.545 | 0.219 | 0.471 | 0.545 | 0.533 | 0.56 | 42/57/16 | 31/41 | 120.8 | v2.1 grouping, --arg-threshold 0.05 |
 | 02-arg01 | dev | y | 0.5 | 0.545 | 0.724 | 0.622 | 0.64 | 0.571 | 0.194 | 0.438 | 0.6 | 0.833 | 0.689 | 42/35/16 | 30/39 | 120.1 | v2.1 grouping, --arg-threshold 0.1 |
+| 03a-coarse-only | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 0/0 | 79.1 | coarse-only detectors (located in/affiliated with/partner of/related to), 2 calls |
+| 03b-coarse-fine | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 15/23 | 159.4 | coarse + v2.1 fine passes; score = coarse detector only; fine = qualifiers |
+| 03c-coarse-fine-all | dev | y | 0.5 | 0.581 | 0.741 | 0.652 | 0.658 | 0.564 | 0.199 | 0.412 | 0.714 | 0.769 | 0.737 | 43/31/15 | 29/41 | 159.4 | same raw as 03b; score = max over coarse+fine names |
+| 03d-coarse-fine-noisyor | dev | y | 0.5 | 0.479 | 0.776 | 0.592 | 0.611 | 0.656 | 0.333 | 0.326 | 0.69 | 0.75 | 0.677 | 45/49/13 | 32/43 | 159.4 | same raw as 03b; noisy-or over all names |
+| 03e-coarse-only-b | dev | y | 0.5 | 0.78 | 0.552 | 0.646 | 0.622 | 0.513 | 0.12 | 0.4 | 0.632 | 0.667 | 0.791 | 32/9/26 | 0/0 | 78.4 | coarse-only wording b (based in/works for/affiliated with/relationship), 2 calls |

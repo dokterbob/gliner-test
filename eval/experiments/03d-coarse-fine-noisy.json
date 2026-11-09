@@ -1,0 +1,3 @@
+{"id": "03d-coarse-fine-noisyor", "desc": "same raw as 03b; noisy-or over all names",
+ "schema": "eval/experiments/schemas/coarse-fine.json", "engine": "coreml-fp32", "raw": "03b-coarse-fine",
+ "flags": {}, "post": {"collapse": "noisy-or", "score_names": "all", "threshold": 0.5}}

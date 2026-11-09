@@ -1,0 +1,211 @@
+{
+ "$comment": "Exp 03e: alternative coarse wording; 2 calls per window",
+ "version": "2.2",
+ "ontology": {
+  "entities": "OntoNotes 5.0 (subset)",
+  "relations": "ACE 2005 (LDC2006T06) subset, mapped to Wikidata properties"
+ },
+ "entities": [
+  {
+   "ontonotes": "PERSON",
+   "label": "person",
+   "description": "People, including fictional"
+  },
+  {
+   "ontonotes": "ORG",
+   "label": "organization",
+   "description": "Companies, agencies, institutions, etc."
+  },
+  {
+   "ontonotes": "GPE",
+   "label": "country, city, state or other political territory",
+   "description": "Geopolitical entities: countries, cities, states"
+  },
+  {
+   "ontonotes": "LOC",
+   "label": "geographic feature such as a mountain, river or region",
+   "description": "Non-GPE locations, mountain ranges, bodies of water"
+  },
+  {
+   "ontonotes": "FAC",
+   "label": "facility",
+   "description": "Buildings, airports, highways, bridges, etc."
+  },
+  {
+   "ontonotes": "NORP",
+   "label": "nationality, religious or political group",
+   "description": "Nationalities or religious or political groups"
+  },
+  {
+   "ontonotes": "DATE",
+   "label": "date",
+   "description": "Absolute or relative dates or periods"
+  },
+  {
+   "ontonotes": "TIME",
+   "label": "time",
+   "description": "Times smaller than a day (clock times, datetimes)"
+  }
+ ],
+ "relation_passes": [
+  "coarse"
+ ],
+ "relations": [
+  {
+   "name": "coarse_place",
+   "prompt": "based in",
+   "pass": "coarse",
+   "head": [
+    "PERSON",
+    "ORG",
+    "FAC",
+    "GPE",
+    "LOC"
+   ],
+   "tail": [
+    "GPE",
+    "LOC",
+    "FAC"
+   ],
+   "symmetric": false
+  },
+  {
+   "name": "coarse_affil",
+   "prompt": "works for",
+   "pass": "coarse",
+   "head": [
+    "PERSON"
+   ],
+   "tail": [
+    "ORG"
+   ],
+   "symmetric": false
+  },
+  {
+   "name": "coarse_partner",
+   "prompt": "affiliated with",
+   "pass": "coarse",
+   "head": [
+    "ORG"
+   ],
+   "tail": [
+    "ORG"
+   ],
+   "symmetric": true
+  },
+  {
+   "name": "coarse_related",
+   "prompt": "relationship",
+   "pass": "coarse",
+   "head": [
+    "PERSON"
+   ],
+   "tail": [
+    "PERSON"
+   ],
+   "symmetric": true
+  }
+ ],
+ "relations_optional": [
+  {
+   "name": "owner_of",
+   "ace2005": "ORG-AFF.Ownership + ORG-AFF.Investor-Shareholder",
+   "wikidata": [
+    "P127"
+   ],
+   "wikidata_inverse": true,
+   "head": [
+    "PERSON",
+    "ORG",
+    "GPE"
+   ],
+   "tail": [
+    "ORG",
+    "FAC"
+   ]
+  },
+  {
+   "name": "alumnus_of",
+   "ace2005": "ORG-AFF.Student-Alum",
+   "wikidata": [
+    "P69"
+   ],
+   "wikidata_inverse": false,
+   "head": [
+    "PERSON"
+   ],
+   "tail": [
+    "ORG"
+   ]
+  }
+ ],
+ "pair_categories": [
+  {
+   "id": "place",
+   "directed": true,
+   "head": [
+    "PERSON",
+    "ORG",
+    "FAC",
+    "GPE",
+    "LOC"
+   ],
+   "tail": [
+    "GPE",
+    "LOC",
+    "FAC"
+   ],
+   "qualifiers": [],
+   "threshold": null,
+   "detectors": [
+    "coarse_place"
+   ]
+  },
+  {
+   "id": "per_per",
+   "directed": false,
+   "head": [
+    "PERSON"
+   ],
+   "tail": [
+    "PERSON"
+   ],
+   "qualifiers": [],
+   "threshold": null,
+   "detectors": [
+    "coarse_related"
+   ]
+  },
+  {
+   "id": "org_org",
+   "directed": false,
+   "head": [
+    "ORG"
+   ],
+   "tail": [
+    "ORG"
+   ],
+   "qualifiers": [],
+   "threshold": null,
+   "detectors": [
+    "coarse_partner"
+   ]
+  },
+  {
+   "id": "per_org",
+   "directed": false,
+   "head": [
+    "PERSON"
+   ],
+   "tail": [
+    "ORG"
+   ],
+   "qualifiers": [],
+   "threshold": null,
+   "detectors": [
+    "coarse_affil"
+   ]
+  }
+ ],
+ "threshold": 0.5
+}

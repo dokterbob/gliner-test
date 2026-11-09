@@ -1,0 +1,3 @@
+{"id": "03c-coarse-fine-all", "desc": "same raw as 03b; score = max over coarse+fine names",
+ "schema": "eval/experiments/schemas/coarse-fine.json", "engine": "coreml-fp32", "raw": "03b-coarse-fine",
+ "flags": {}, "post": {"collapse": "max", "score_names": "all", "threshold": 0.5}}

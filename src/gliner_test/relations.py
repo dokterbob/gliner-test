@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -67,6 +68,7 @@ def load_schema(path):
                 "head": list(c["head"]),
                 "tail": list(c["tail"]),
                 "qualifiers": list(c.get("qualifiers", [])),
+                "detectors": list(c.get("detectors", [])),
                 "threshold": c.get("threshold"),
             }
         )
@@ -196,8 +198,11 @@ def collapse_pairs(relations, categories, window_id=None, mode="max", score_name
     the best score is kept; the pair `score` is `mode` (max | noisy-or) over
     those per-name scores. `score_names="all"` uses every name seen for the
     pair; `"qualifiers"` only names in the category's qualifier list (pairs
-    with none of them are dropped). `qualifiers` is [{name, score}], limited
-    to the category's qualifiers, sorted by score descending then name."""
+    with none of them are dropped); `"detectors"` only names in the
+    category's optional `detectors` list (coarse prompts whose job is to
+    detect the pair; the fine `qualifiers` then only label it). `qualifiers`
+    is [{name, score}], limited to the category's qualifiers, sorted by score
+    descending then name."""
     cat_by_id = {c["id"]: c for c in categories}
     groups = {}
     order = []
@@ -222,6 +227,8 @@ def collapse_pairs(relations, categories, window_id=None, mode="max", score_name
         quals.sort(key=lambda ns: (-ns[1], ns[0]))
         if score_names == "qualifiers":
             used = [s for _, s in quals]
+        elif score_names == "detectors":
+            used = [g["names"][n] for n in sorted(g["names"]) if n in cat.get("detectors", [])]
         else:
             used = [g["names"][n] for n in sorted(g["names"])]
         if not used:
@@ -317,6 +324,86 @@ def apply_isotonic(table, score):
             hi = mid
     span = xs[hi] - xs[lo]
     return ys[lo] + (ys[hi] - ys[lo]) * ((score - xs[lo]) / span)
+
+
+def _logit(p, eps=1e-6):
+    p = eps if p < eps else (1.0 - eps if p > 1.0 - eps else p)
+    return math.log(p / (1.0 - p))
+
+
+def apply_temperature_score(score, temperature):
+    """sigmoid(logit(score) / T); T > 1 flattens, T < 1 sharpens. Monotone,
+    so it never changes a ranking (AUPRC) -- only the probability scale."""
+    z = _logit(score) / temperature
+    if z >= 0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
+
+
+def _nll(samples, temperature):
+    tot = 0.0
+    for s, y in samples:
+        q = apply_temperature_score(s, temperature)
+        q = 1e-12 if q < 1e-12 else (1.0 - 1e-12 if q > 1.0 - 1e-12 else q)
+        tot -= math.log(q) if y else math.log(1.0 - q)
+    return tot / len(samples)
+
+
+def fit_temperature(samples, lo=0.05, hi=20.0, iters=80):
+    """Single temperature minimising the log-loss of sigmoid(logit(s)/T) on
+    [(score, 0/1)] by golden-section search over log T (the loss is unimodal
+    in 1/T). Returns 1.0 for empty input."""
+    if not samples:
+        return 1.0
+    a, b = math.log(lo), math.log(hi)
+    g = (math.sqrt(5.0) - 1.0) / 2.0
+    c = b - g * (b - a)
+    d = a + g * (b - a)
+    fc, fd = _nll(samples, math.exp(c)), _nll(samples, math.exp(d))
+    for _ in range(iters):
+        if fc < fd:
+            b, d, fd = d, c, fc
+            c = b - g * (b - a)
+            fc = _nll(samples, math.exp(c))
+        else:
+            a, c, fc = c, d, fd
+            d = a + g * (b - a)
+            fd = _nll(samples, math.exp(d))
+    return math.exp((a + b) / 2.0)
+
+
+def fit_temperature_table(samples_by_category, engine=None, min_samples=8):
+    """-> {"method":"temperature","engine","global":{"n","T"},"categories":{cat:{"n","T"}}}.
+    Categories with fewer than `min_samples` samples use the pooled `global` T."""
+    pooled = [x for c in sorted(samples_by_category) for x in samples_by_category[c]]
+    cats = {}
+    for cid in sorted(samples_by_category):
+        sm = samples_by_category[cid]
+        if len(sm) >= min_samples:
+            cats[cid] = {"n": len(sm), "T": fit_temperature(sm)}
+    return {"method": "temperature", "engine": engine, "global": {"n": len(pooled), "T": fit_temperature(pooled)},
+            "categories": cats}
+
+
+def apply_temperature(pairs, calibration):
+    """Temperature-scale each pair score (per-category T, else the global T);
+    keeps the raw score as `raw_score`."""
+    out = []
+    for p in pairs:
+        t = calibration["categories"].get(p["category"], calibration["global"])["T"]
+        q = dict(p)
+        q["raw_score"] = p["score"]
+        q["score"] = apply_temperature_score(p["score"], t)
+        out.append(q)
+    return out
+
+
+def apply_calibration(pairs, calibration):
+    """Dispatch on calibration["method"] (isotonic | temperature)."""
+    if calibration.get("method") == "temperature":
+        return apply_temperature(pairs, calibration)
+    return apply(pairs, calibration)
 
 
 def fit(samples_by_category, engine=None, min_samples=1):
@@ -511,7 +598,7 @@ def main(argv=None):
     ap.add_argument("--schema", type=Path, default=Path("schema/ontonotes.json"))
     ap.add_argument("--out", type=Path, default=None, help="pairs JSONL (one pair per line)")
     ap.add_argument("--collapse", choices=["max", "noisy-or"], default="max")
-    ap.add_argument("--score-names", choices=["all", "qualifiers"], default="all",
+    ap.add_argument("--score-names", choices=["all", "qualifiers", "detectors"], default="all",
                     help="names contributing to the pair score (default all; qualifiers = category's own names)")
     ap.add_argument("--global-threshold", type=float, default=None,
                     help="fallback threshold for categories whose schema threshold is null (default: schema threshold)")
@@ -522,6 +609,8 @@ def main(argv=None):
     ap.add_argument("--gold", type=Path, default=Path("eval/gold.jsonl"))
     ap.add_argument("--split", default="dev", help="gold split used for fitting (gold without `split` counts as all)")
     ap.add_argument("--calibration-out", type=Path, default=None)
+    ap.add_argument("--calibration-method", choices=["isotonic", "temperature"], default="isotonic",
+                    help="method used by --fit-calibration")
     ap.add_argument("--aggregate", type=Path, default=None, help="also write document-level aggregated pairs here")
     ap.add_argument("--windows", type=Path, default=Path("data/windows.jsonl"))
     ap.add_argument("--aggregate-mode", choices=["max", "noisy-or"], default="max")
@@ -545,7 +634,10 @@ def main(argv=None):
                 continue
             for p, lab in zip(pairs, label_pairs(pairs, g)):
                 samples[p["category"]].append((p["score"], lab))
-        table = fit(samples, engine=args.preds.stem)
+        if args.calibration_method == "temperature":
+            table = fit_temperature_table(samples, engine=args.preds.stem)
+        else:
+            table = fit(samples, engine=args.preds.stem)
         args.calibration_out.parent.mkdir(parents=True, exist_ok=True)
         args.calibration_out.write_text(json.dumps(table, indent=1))
         print(f"[relations] fitted {args.calibration_out}: "
@@ -556,7 +648,7 @@ def main(argv=None):
     all_pairs = []
     for _wid, pairs in by_window:
         if calibration is not None:
-            pairs = apply(pairs, calibration)
+            pairs = apply_calibration(pairs, calibration)
         all_pairs.extend(apply_thresholds(pairs, cats, gthr, overrides))
 
     if args.out is not None:

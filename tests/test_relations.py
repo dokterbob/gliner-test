@@ -190,3 +190,42 @@ def test_aggregate_keeps_different_categories_apart():
          "tail": {**ep("Y", 5), "type": "GPE"}, "score": 0.9, "qualifiers": []}
     b = {**a, "category": "org_org", "directed": False, "tail": {**ep("Y", 5), "type": "ORG"}}
     assert len(R.aggregate_document([a, b], windows)) == 2
+
+
+def test_detectors_score_names():
+    cats = [dict(c, detectors=["related_to"]) if c["id"] == "per_per" else c for c in CATS]
+    ents = [ent("PERSON", "Ann", 0), ent("PERSON", "Bob", 10)]
+    rs = typed([
+        rel("related_to", ep("Ann", 0), ep("Bob", 10), 0.4),
+        rel("family", ep("Ann", 0), ep("Bob", 10), 0.9),
+    ], ents)
+    (p,) = R.collapse_pairs(rs, cats, "w", score_names="detectors")
+    assert p["score"] == pytest.approx(0.4)                  # only the detector scores the pair
+    assert [q["name"] for q in p["qualifiers"]] == ["family"]  # fine names stay qualifiers
+    assert R.collapse_pairs(rs, cats, "w", score_names="all")[0]["score"] == pytest.approx(0.9)
+
+
+def test_temperature_identity_monotone_and_fit():
+    assert R.apply_temperature_score(0.7, 1.0) == pytest.approx(0.7, abs=1e-9)
+    xs = [0.05, 0.2, 0.5, 0.8, 0.95]
+    for t in (0.5, 2.0):
+        ys = [R.apply_temperature_score(x, t) for x in xs]
+        assert ys == sorted(ys)
+    assert R.apply_temperature_score(0.9, 3.0) < 0.9 < R.apply_temperature_score(0.9, 0.5)
+    # over-confident scores (0.95 but right only half the time) need T > 1; under-confident need T < 1
+    over = [(0.95, 1), (0.95, 0)] * 20
+    under = [(0.6, 1)] * 19 + [(0.6, 0)] + [(0.4, 0)] * 20
+    assert R.fit_temperature(over) > 1.5
+    assert R.fit_temperature(under) < 1.0
+    assert R.fit_temperature([]) == 1.0
+
+
+def test_temperature_table_apply_and_dispatch():
+    samples = {"a": [(0.95, 1), (0.95, 0)] * 10, "b": [(0.9, 1)]}
+    table = R.fit_temperature_table(samples, engine="x", min_samples=8)
+    assert "a" in table["categories"] and "b" not in table["categories"]   # b falls back to the pooled T
+    table = json.loads(json.dumps(table))
+    pairs = [{"category": "a", "score": 0.95}, {"category": "b", "score": 0.9}]
+    out = R.apply_calibration(pairs, table)
+    assert out[0]["raw_score"] == 0.95 and out[0]["score"] < 0.95
+    assert out[1]["score"] == pytest.approx(R.apply_temperature_score(0.9, table["global"]["T"]))

@@ -1,0 +1,3 @@
+{"id": "03b-coarse-fine", "desc": "coarse + v2.1 fine passes; score = coarse detector only; fine = qualifiers",
+ "schema": "eval/experiments/schemas/coarse-fine.json", "engine": "coreml-fp32",
+ "flags": {}, "post": {"collapse": "max", "score_names": "detectors", "threshold": 0.5}}
