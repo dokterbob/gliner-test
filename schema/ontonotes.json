@@ -1,0 +1,21 @@
+{
+  "$comment": "Single source of truth for labels used by BOTH the CoreML (Python) and gliner25-rs (Rust) runs. The CoreML extraction bucket allows <= 8 entity queries and the relation head <= 4 relation types (R4). `label` is the natural-language prompt sent to GLiNER; `ontonotes` is the OntoNotes 5.0 tag it maps back to. Descriptions are from the OntoNotes 5.0 release notes; whether to send them to the model is an experiment knob (they cost prompt tokens against the 128-token bucket).",
+  "ontology": "OntoNotes 5.0 (subset)",
+  "entities": [
+    {"ontonotes": "PERSON", "label": "person", "description": "People, including fictional"},
+    {"ontonotes": "ORG", "label": "organization", "description": "Companies, agencies, institutions, etc."},
+    {"ontonotes": "GPE", "label": "country, city or state", "description": "Geopolitical entities: countries, cities, states"},
+    {"ontonotes": "LOC", "label": "location", "description": "Non-GPE locations, mountain ranges, bodies of water"},
+    {"ontonotes": "FAC", "label": "facility", "description": "Buildings, airports, highways, bridges, etc."},
+    {"ontonotes": "NORP", "label": "nationality, religious or political group", "description": "Nationalities or religious or political groups"},
+    {"ontonotes": "DATE", "label": "date", "description": "Absolute or relative dates or periods"},
+    {"ontonotes": "TIME", "label": "time", "description": "Times smaller than a day (clock times, datetimes)"}
+  ],
+  "relations": [
+    {"name": "works_for", "description": "person is employed by or a member of an organization", "head": ["PERSON"], "tail": ["ORG"]},
+    {"name": "located_in", "description": "organization, facility or place is located in a place", "head": ["ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"]},
+    {"name": "founded_by", "description": "organization was founded or created by a person or organization", "head": ["ORG"], "tail": ["PERSON", "ORG"]},
+    {"name": "occurred_on", "description": "an entity or event is associated with a date or time", "head": ["PERSON", "ORG", "FAC", "GPE", "LOC", "NORP"], "tail": ["DATE", "TIME"]}
+  ],
+  "threshold": 0.5
+}
