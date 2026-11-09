@@ -139,7 +139,7 @@ promise 0.8 precision from thresholds alone.
   | coreml-fp16-w8 | 1.047 | 2.618 | 0.534 | 0.429 | 1.118 |
 
   Place is over-confident (T 1.9 to 2.6), per_per and org_org under-confident (T 0.4 to 0.5). The org_org value rests on 11 to 12 dev samples.
-- Schema edits made (commit 724dc26, plus the revert in the next schema commit): relation `pass` fields, the `relation_passes` list
+- Schema edits made (commit 724dc26; thresholds reverted to null inside 62aaa44): relation `pass` fields, the `relation_passes` list
   (`["affiliation", "social_place"]`; needed for the pass change), `$comment`; `pair_categories[].threshold` stays `null`.
 
 ## Test results (45 pairs; counts tp/fp/fn)
