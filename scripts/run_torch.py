@@ -15,6 +15,25 @@ Usage:
         --windows data/windows.jsonl \
         --out data/preds/torch-fp32.jsonl \
         --device cpu
+
+## One-pass vs. multi-pass
+
+`--mode multi-pass` (the default) runs one `model.extract()` call for
+entities, then one more per `schema.relation_passes` group (schema v2:
+"affiliation" then "social_place", 4 relations each), mirroring
+scripts/run_coreml.py exactly -- that pipeline is limited to 8 queries per
+call, so it *must* split entities (8 labels) and each relation pass (4
+names x 2 roles = 8) into separate calls. GLiNER2 conditions every task's
+attention on the whole prompt, so a one-pass call with everything together
+is a different encoder input, not just a latency optimization --
+`--mode one-pass` keeps the original combined-schema behavior for the cost
+comparison in docs/cross-validation.md.
+
+Schema v2 separates the relation's canonical output id (`name`, e.g.
+"employee_of") from the text sent to the model (`prompt`, e.g. "works for").
+`model.create_schema().relations([...])` takes prompts; the result dict is
+keyed by whatever string was passed in, so we map prompt -> name on the way
+out.
 """
 import argparse
 import json
@@ -27,9 +46,15 @@ def load_schema(path: Path):
     schema = json.loads(path.read_text())
     label_to_tag = {e["label"]: e["ontonotes"] for e in schema["entities"]}
     entity_labels = [e["label"] for e in schema["entities"]]
-    relation_names = [r["name"] for r in schema["relations"]]
+    prompt_to_name = {r["prompt"]: r["name"] for r in schema["relations"]}
+    passes = schema.get("relation_passes", [])
+    prompts_by_pass = {
+        pass_name: [r["prompt"] for r in schema["relations"] if r["pass"] == pass_name]
+        for pass_name in passes
+    }
+    all_prompts = [r["prompt"] for r in schema["relations"]]
     threshold = schema["threshold"]
-    return entity_labels, relation_names, label_to_tag, threshold
+    return entity_labels, prompts_by_pass, all_prompts, prompt_to_name, label_to_tag, threshold
 
 
 def peak_rss_mb() -> float:
@@ -49,9 +74,11 @@ def main() -> None:
     ap.add_argument("--repo", default="fastino/gliner2.5-multi-v1")
     ap.add_argument("--device", default="cpu", choices=["cpu", "mps"])
     ap.add_argument("--limit", type=int, default=0, help="0 = all windows")
+    ap.add_argument("--mode", default="multi-pass", choices=["one-pass", "multi-pass"],
+                     help="multi-pass (default) mirrors scripts/run_coreml.py's entities-then-per-relation-pass split")
     args = ap.parse_args()
 
-    entity_labels, relation_names, label_to_tag, threshold = load_schema(args.schema)
+    entity_labels, prompts_by_pass, all_prompts, prompt_to_name, label_to_tag, threshold = load_schema(args.schema)
 
     import torch
     from gliner2 import AutoExtractor
@@ -75,7 +102,15 @@ def main() -> None:
     load_ms = (time.perf_counter() - t0) * 1000.0
     print(f"[run_torch] loaded in {load_ms:.1f} ms")
 
-    schema_obj = model.create_schema().entities(entity_labels).relations(relation_names)
+    multi_pass = args.mode == "multi-pass"
+    if multi_pass:
+        ent_schema = model.create_schema().entities(entity_labels)
+        rel_schemas = [
+            (pass_name, model.create_schema().relations(prompts))
+            for pass_name, prompts in prompts_by_pass.items()
+        ]
+    else:
+        combined_schema = model.create_schema().entities(entity_labels).relations(all_prompts)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     latencies_ms = []
@@ -91,27 +126,42 @@ def main() -> None:
             rec = json.loads(line)
             text = rec["text"]
 
-            t0 = time.perf_counter()
             try:
-                result = model.extract(
-                    text,
-                    schema_obj,
-                    threshold=threshold,
-                    include_confidence=True,
-                    include_spans=True,
-                )
+                if multi_pass:
+                    t0 = time.perf_counter()
+                    ent_result = model.extract(
+                        text, ent_schema, threshold=threshold,
+                        include_confidence=True, include_spans=True,
+                    )
+                    relations_src = {}
+                    for _pass_name, rel_schema in rel_schemas:
+                        rel_result = model.extract(
+                            text, rel_schema, threshold=threshold,
+                            include_confidence=True, include_spans=True,
+                        )
+                        relations_src.update(rel_result.get("relation_extraction", {}))
+                    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                    entities_src = ent_result.get("entities", {})
+                else:
+                    t0 = time.perf_counter()
+                    result = model.extract(
+                        text, combined_schema, threshold=threshold,
+                        include_confidence=True, include_spans=True,
+                    )
+                    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+                    entities_src = result.get("entities", {})
+                    relations_src = result.get("relation_extraction", {})
             except Exception as e:  # noqa: BLE001
                 if device == "mps" and mps_error is None:
                     mps_error = repr(e)
                     print(f"[run_torch] mps extract failed ({e!r}); this window skipped")
                     continue
                 raise
-            elapsed_ms = (time.perf_counter() - t0) * 1000.0
             latencies_ms.append(elapsed_ms)
             total_words += len(text.split())
 
             entities = []
-            for label, items in result.get("entities", {}).items():
+            for label, items in entities_src.items():
                 tag = label_to_tag.get(label, label)
                 for it in items:
                     entities.append({
@@ -123,7 +173,8 @@ def main() -> None:
                     })
 
             relations = []
-            for name, pairs in result.get("relation_extraction", {}).items():
+            for prompt, pairs in relations_src.items():
+                name = prompt_to_name.get(prompt, prompt)
                 for pair in pairs:
                     head, tail = pair["head"], pair["tail"]
                     score = min(head.get("confidence", 1.0), tail.get("confidence", 1.0))
@@ -158,6 +209,7 @@ def main() -> None:
     timing = {
         "engine": "torch",
         "device": device,
+        "mode": args.mode,
         "repo": args.repo,
         "windows": n,
         "load_ms": load_ms,

@@ -159,20 +159,76 @@ def entity_metrics(pred_by_window: dict, ref_by_window: dict, mode: str):
     return per_label, score_diffs, len(shared_ids)
 
 
-def relation_key(rel):
-    return (rel["name"], rel["head"]["text"].lower(), rel["tail"]["text"].lower())
+def load_relation_schema(schema_path: Path) -> dict:
+    """name -> {"symmetric": bool, "head": [...], "tail": [...]} from schema/ontonotes.json."""
+    if not schema_path.exists():
+        return {}
+    schema = json.loads(schema_path.read_text())
+    return {
+        r["name"]: {
+            "symmetric": bool(r.get("symmetric", False)),
+            "head": r.get("head", []),
+            "tail": r.get("tail", []),
+        }
+        for r in schema.get("relations", [])
+    }
 
 
-def relation_metrics(pred_by_window: dict, ref_by_window: dict):
+def relation_key(rel, symmetric_names: set):
+    """(name, head_text, tail_text), order-insensitive for symmetric relations
+    (schema v2: family, business_associate, personal_relation) so that e.g.
+    family(A, B) and family(B, A) count as the same instance."""
+    head = rel["head"]["text"].lower()
+    tail = rel["tail"]["text"].lower()
+    if rel["name"] in symmetric_names:
+        head, tail = sorted((head, tail))
+    return (rel["name"], head, tail)
+
+
+def relation_metrics(pred_by_window: dict, ref_by_window: dict, symmetric_names: set = frozenset()):
     tp = fp = fn = 0
     shared_ids = set(pred_by_window) & set(ref_by_window)
     for wid in shared_ids:
-        pred_rels = {relation_key(r) for r in pred_by_window[wid].get("relations", [])}
-        ref_rels = {relation_key(r) for r in ref_by_window[wid].get("relations", [])}
+        pred_rels = {relation_key(r, symmetric_names) for r in pred_by_window[wid].get("relations", [])}
+        ref_rels = {relation_key(r, symmetric_names) for r in ref_by_window[wid].get("relations", [])}
         tp += len(pred_rels & ref_rels)
         fp += len(pred_rels - ref_rels)
         fn += len(ref_rels - pred_rels)
     return prf1(tp, fp, fn), (tp, fp, fn)
+
+
+def build_type_index(entities):
+    return [(e["start"], e["end"], e["label"]) for e in entities]
+
+
+def span_has_type(start, end, type_index, allowed_labels: set) -> bool:
+    return any(l in allowed_labels and spans_overlap(start, end, s, e) for s, e, l in type_index)
+
+
+def type_filter_relations(pred_by_window: dict, relation_schema: dict) -> dict:
+    """Optional post-filter variant: drop a relation pair unless its head/tail
+    span overlaps one of THIS ENGINE's OWN entity predictions whose label is
+    among the relation's declared OntoNotes head/tail types in
+    schema/ontonotes.json. Neither gliner25-rs's pair_relations nor gliner2's
+    independent extract_relations apply this typing themselves (see
+    docs/cross-validation.md); this is an evaluation-side variant, not a
+    claim about what either engine does natively."""
+    filtered = {}
+    for wid, rec in pred_by_window.items():
+        idx = build_type_index(rec.get("entities", []))
+        kept = []
+        for rel in rec.get("relations", []):
+            spec = relation_schema.get(rel["name"])
+            if spec is None:
+                kept.append(rel)
+                continue
+            h = rel["head"]
+            t = rel["tail"]
+            if span_has_type(h["start"], h["end"], idx, set(spec["head"])) and \
+               span_has_type(t["start"], t["end"], idx, set(spec["tail"])):
+                kept.append(rel)
+        filtered[wid] = {**rec, "relations": kept}
+    return filtered
 
 
 def top_disagreements(pred_by_window, ref_by_window, windows_text, k=15):
@@ -213,7 +269,11 @@ def main():
                      help="engine (filename stem under preds-dir) to use as the corpus-agreement reference")
     ap.add_argument("--report", type=Path, default=None, help="write markdown report here; also printed to stdout")
     ap.add_argument("--top-k-disagreements", type=int, default=15)
+    ap.add_argument("--schema", type=Path, default=Path("schema/ontonotes.json"))
     args = ap.parse_args()
+
+    relation_schema = load_relation_schema(args.schema)
+    symmetric_names = {name for name, spec in relation_schema.items() if spec["symmetric"]}
 
     windows_text = {}
     if args.windows.exists():
@@ -264,9 +324,9 @@ def main():
                         f"mean_abs={statistics.mean(abs(x) for x in score_diffs):.4f}, "
                         f"stdev={statistics.pstdev(score_diffs):.4f}, n={len(score_diffs)}\n"
                     )
-            (p, r, f1), (tp, fp, fn) = relation_metrics(preds, ref)
+            (p, r, f1), (tp, fp, fn) = relation_metrics(preds, ref, symmetric_names)
             out_lines.append(
-                f"\n**relations** (exact name+head_text+tail_text match): "
+                f"\n**relations** (exact name+head_text+tail_text match, symmetric relations order-insensitive): "
                 f"tp={tp} fp={fp} fn={fn} P={p:.3f} R={r:.3f} F1={f1:.3f}\n"
             )
 
@@ -305,11 +365,20 @@ def main():
             out_lines.append("\noverlap match\n")
             out_lines.append(md_table(["label", "tp", "fp", "fn", "P", "R", "F1"], rows_ov))
 
-            (p, r, f1), (tp, fp, fn) = relation_metrics(preds, gold)
+            (p, r, f1), (tp, fp, fn) = relation_metrics(preds, gold, symmetric_names)
             out_lines.append(
-                f"\n**relations** (exact name+head_text+tail_text match): "
+                f"\n**relations, independent** (exact name+head_text+tail_text match, symmetric order-insensitive): "
                 f"tp={tp} fp={fp} fn={fn} P={p:.3f} R={r:.3f} F1={f1:.3f}\n"
             )
+
+            if relation_schema:
+                filtered_preds = type_filter_relations(preds, relation_schema)
+                (p, r, f1), (tp, fp, fn) = relation_metrics(filtered_preds, gold, symmetric_names)
+                out_lines.append(
+                    f"\n**relations, independent + type post-filter** (head/tail span must overlap this "
+                    f"engine's own entity prediction of a type the schema allows for that relation): "
+                    f"tp={tp} fp={fp} fn={fn} P={p:.3f} R={r:.3f} F1={f1:.3f}\n"
+                )
 
     # -------------------------------------------------- (iii) disagreements
     out_lines.append("\n## 3. Top disagreements vs reference (corpus windows)\n")

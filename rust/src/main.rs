@@ -14,6 +14,35 @@
 //!     --windows data/windows.jsonl \
 //!     --out data/preds/rust-ort-fp32.jsonl \
 //!     --device cpu --precision fp32
+//!
+//! ## Byte vs. char offsets (fixed 2026-11-09)
+//!
+//! `gliner25_rs::Mention::char_start`/`char_end` are, despite the name, BYTE
+//! offsets into the `&str` -- see `boundary.rs:108` ("Byte range `[start,
+//! end)` in the original text.") and `processor.rs:148` (same wording for
+//! `word_to_char_maps`). The shared prediction format used across all three
+//! engines in this repo is *char* (Unicode scalar value) offsets, matching
+//! Python string indexing. On any window containing a multi-byte UTF-8
+//! character (accented Latin letters in the NL/DE/FR gold sentences, but
+//! also em dashes/arrows/section signs that show up constantly in the
+//! "English" corpus text), the raw byte offset drifts from the char offset
+//! by the number of extra bytes contributed by every multi-byte character at
+//! or before that position -- silently misaligning every span after the
+//! first non-ASCII character in a window. `byte_to_char_map` below converts
+//! once per window before anything is written out.
+//!
+//! ## One-pass vs. two-pass
+//!
+//! The CoreML export's extraction bucket allows only 8 queries per call, so
+//! `scripts/run_coreml.py` necessarily runs entities (8 queries) and
+//! relations (4 relation names x 2 roles = 8 queries) as two separate
+//! `extract()` calls per window. GLiNER2 conditions every task's attention
+//! on the *whole* prompt, so a combined one-pass call is a materially
+//! different input to the encoder than two one-task calls, not just a
+//! latency difference. `--mode two-pass` (the default here, mirroring
+//! CoreML) runs the same two separate calls; `--mode one-pass` runs the
+//! original combined 12-query call, kept for the one-pass/two-pass cost
+//! comparison in docs/cross-validation.md.
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
@@ -24,9 +53,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use gliner25_rs::{
-    BoundaryConfig, BoundaryEngine, BoundaryParams, Mention, SchemaTask, pair_relations,
-};
+use gliner25_rs::{BoundaryConfig, BoundaryEngine, BoundaryParams, SchemaTask, pair_relations};
 
 #[derive(Parser, Debug)]
 #[command(about = "Run gliner25-rs over a windows JSONL file, shared prediction format out")]
@@ -54,11 +81,36 @@ struct Args {
     /// Cap the number of windows processed (0 = all); handy for a quick smoke run.
     #[arg(long, default_value_t = 0)]
     limit: usize,
+    /// "multi-pass" (default, mirrors scripts/run_coreml.py: one extract()
+    /// call for entities, then one more per schema.relation_passes group) or
+    /// "one-pass" (single combined schema, everything in one call).
+    #[arg(long, default_value = "multi-pass")]
+    mode: String,
+}
+
+/// Maps every byte offset that starts a Unicode scalar value to its char
+/// (codepoint) index, plus `text.len() -> total char count`. Only byte
+/// offsets that are themselves char boundaries are ever looked up (all of
+/// ours come from word-boundary splitting), so continuation-byte entries are
+/// left at 0 and never read.
+fn byte_to_char_map(text: &str) -> Vec<usize> {
+    let mut map = vec![0usize; text.len() + 1];
+    let mut char_count = 0usize;
+    for (byte_idx, _) in text.char_indices() {
+        map[byte_idx] = char_count;
+        char_count += 1;
+    }
+    map[text.len()] = char_count;
+    map
 }
 
 #[derive(Debug, Deserialize)]
 struct SchemaFile {
     entities: Vec<SchemaEntity>,
+    /// v2: relations are grouped into passes (CoreML relation head is R4,
+    /// bucket Q<=8), e.g. ["affiliation", "social_place"]. Every engine runs
+    /// one extract() call per pass, on top of the entities call.
+    relation_passes: Vec<String>,
     relations: Vec<SchemaRelation>,
     threshold: f32,
 }
@@ -71,7 +123,13 @@ struct SchemaEntity {
 
 #[derive(Debug, Deserialize)]
 struct SchemaRelation {
+    /// Canonical output id (what we write to the shared format).
     name: String,
+    /// Text sent to the model as the relation's prompt -- may differ from
+    /// `name` (schema v2: name is e.g. "employee_of", prompt is "works for").
+    prompt: String,
+    /// Which relation_passes group this relation belongs to.
+    pass: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -135,13 +193,49 @@ fn main() -> Result<()> {
         .collect();
 
     let entity_labels: Vec<String> = schema.entities.iter().map(|e| e.label.clone()).collect();
-    let mut tasks: Vec<SchemaTask> = vec![SchemaTask::Entities(entity_labels)];
-    for rel in &schema.relations {
-        tasks.push(SchemaTask::Relations(
-            rel.name.clone(),
-            vec!["head".to_string(), "tail".to_string()],
-        ));
-    }
+    let entity_tasks: Vec<SchemaTask> = vec![SchemaTask::Entities(entity_labels)];
+
+    // prompt text sent to the model -> canonical output name (schema v2:
+    // `name` e.g. "employee_of" vs `prompt` e.g. "works for").
+    let prompt_to_name: std::collections::HashMap<String, String> = schema
+        .relations
+        .iter()
+        .map(|r| (r.prompt.clone(), r.name.clone()))
+        .collect();
+
+    // One SchemaTask::Relations per relation, grouped by schema.relation_passes
+    // (CoreML's relation head is R4 / bucket Q<=8, so relations run in groups
+    // of <= 4). The prompt text -- not the canonical name -- is what becomes
+    // the model's "[P]" marker per gliner25-rs's processor.rs (SchemaTask::Relations's
+    // first field is literally sent as the prompt string).
+    let relation_pass_tasks: Vec<Vec<SchemaTask>> = schema
+        .relation_passes
+        .iter()
+        .map(|pass_name| {
+            schema
+                .relations
+                .iter()
+                .filter(|r| &r.pass == pass_name)
+                .map(|r| {
+                    SchemaTask::Relations(r.prompt.clone(), vec!["head".to_string(), "tail".to_string()])
+                })
+                .collect()
+        })
+        .collect();
+    let all_relation_tasks: Vec<SchemaTask> = relation_pass_tasks.iter().flatten().cloned().collect();
+
+    let multi_pass = match args.mode.as_str() {
+        "multi-pass" => true,
+        "one-pass" => false,
+        other => anyhow::bail!("--mode must be 'one-pass' or 'multi-pass', got {other:?}"),
+    };
+    // one-pass: a single combined schema (8 entity labels + all relation
+    // prompts across every pass) in one extract() call. multi-pass (default):
+    // entities-only, then one call per relation_passes group, mirroring
+    // scripts/run_coreml.py exactly -- see the module doc comment for why
+    // this isn't just a latency knob.
+    let mut combined_tasks: Vec<SchemaTask> = entity_tasks.clone();
+    combined_tasks.extend(all_relation_tasks.clone());
 
     let params = BoundaryParams {
         threshold: schema.threshold,
@@ -187,38 +281,74 @@ fn main() -> Result<()> {
         let rec: WindowRecord = serde_json::from_str(&line)
             .with_context(|| format!("parsing window record: {line}"))?;
 
-        let t0 = Instant::now();
-        let out = engine.extract_with(&rec.text, &tasks, &params)?;
-        let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        // byte offset -> char offset for THIS window's text (see module doc
+        // comment: Mention::char_start/char_end are actually byte offsets).
+        let char_map = byte_to_char_map(&rec.text);
+
+        let (ent_mentions, rel_pairs, elapsed_ms) = if multi_pass {
+            let t0 = Instant::now();
+            let ent_out = engine.extract_with(&rec.text, &entity_tasks, &params)?;
+            let mut pairs = Vec::new();
+            for pass_tasks in &relation_pass_tasks {
+                if pass_tasks.is_empty() {
+                    continue;
+                }
+                let rel_out = engine.extract_with(&rec.text, pass_tasks, &params)?;
+                pairs.extend(pair_relations(&rel_out.mentions, pass_tasks));
+            }
+            let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            (ent_out.mentions, pairs, elapsed_ms)
+        } else {
+            let t0 = Instant::now();
+            let out = engine.extract_with(&rec.text, &combined_tasks, &params)?;
+            let elapsed_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            let pairs = pair_relations(&out.mentions, &combined_tasks);
+            (out.mentions, pairs, elapsed_ms)
+        };
         latencies_ms.push(elapsed_ms);
         total_words += rec.text.split_whitespace().count();
 
-        let entities: Vec<OutEntity> = out
-            .mentions
+        let entities: Vec<OutEntity> = ent_mentions
             .iter()
             .filter(|m| m.task == "entities")
             .map(|m| OutEntity {
                 label: label_to_tag.get(&m.field).cloned().unwrap_or_else(|| m.field.clone()),
                 text: m.text.clone(),
-                start: m.char_start,
-                end: m.char_end,
+                start: char_map[m.char_start],
+                end: char_map[m.char_end],
                 score: m.score,
             })
             .collect();
 
-        // pair_relations does a full cross-product of head x tail mentions per
-        // relation group (gliner25-rs has no joint head/tail score -- neither
-        // does gliner2's public `extract_relations`, which also returns bare
-        // tuples). We report min(head.score, tail.score) as the pair score,
-        // matching what scripts/run_torch.py does for the same reason.
-        let rel_pairs: Vec<(Mention, Mention, String)> = pair_relations(&out.mentions, &tasks);
+        // pair_relations does a full cross-product of every head-role mention
+        // with every tail-role mention sharing a relation name -- no joint
+        // pair score. This is a genuine gliner25-rs gap, not shared with
+        // gliner2: gliner2 2.0.0 decodes relation instances through a learned
+        // scorer (gliner2/models/boundary/relations.py:93-230
+        // TypedRelationPairGenerator, :320-409 SparseRelationScorer.forward,
+        // score = self.mlp(feats) [+ biaffine + linear] at :376-408) fed by
+        // *typed, capped* candidate pairs, not an unscored full cross-product.
+        // gliner25-rs has no equivalent: the jugaadsrl/gliner2.5-multi-v1-onnx
+        // export it loads ships no relation-scorer fragment at all (only
+        // encoder/routed_gather/classifier/boundary_head_L*), unlike the
+        // CoreML export's dedicated gliner2_multi_relation_*.mlpackage. We
+        // report min(head.score, tail.score) as a stand-in pair score, purely
+        // for the shared format -- it is not a model-provided quantity.
         let relations: Vec<OutRelation> = rel_pairs
             .into_iter()
-            .map(|(h, t, name)| OutRelation {
-                name,
+            .map(|(h, t, prompt)| OutRelation {
+                name: prompt_to_name.get(&prompt).cloned().unwrap_or(prompt),
                 score: h.score.min(t.score),
-                head: OutRelEndpoint { text: h.text, start: h.char_start, end: h.char_end },
-                tail: OutRelEndpoint { text: t.text, start: t.char_start, end: t.char_end },
+                head: OutRelEndpoint {
+                    text: h.text,
+                    start: char_map[h.char_start],
+                    end: char_map[h.char_end],
+                },
+                tail: OutRelEndpoint {
+                    text: t.text,
+                    start: char_map[t.char_start],
+                    end: char_map[t.char_end],
+                },
             })
             .collect();
 
@@ -255,6 +385,7 @@ fn main() -> Result<()> {
         "engine": "rust-ort",
         "device": args.device,
         "precision": args.precision,
+        "mode": args.mode,
         "execution_mode": format!("{:?}", engine.execution()),
         "windows": n,
         "load_ms": load_ms,
