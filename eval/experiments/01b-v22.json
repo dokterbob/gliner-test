@@ -1,0 +1,3 @@
+{"id": "01b-v22", "desc": "v2.2 grouping (4 calls), max collapse, thr 0.5",
+ "schema": "schema/ontonotes.json", "engine": "coreml-fp32",
+ "flags": {}, "post": {"collapse": "max", "score_names": "all", "threshold": 0.5}}
