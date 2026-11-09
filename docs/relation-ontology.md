@@ -1,4 +1,4 @@
-# Relation ontology (schema v2)
+# Relation ontology (schema v2.2)
 
 Entities follow OntoNotes 5.0 (8-type subset). OntoNotes defines no relations, so relations
 follow a small **ACE 2005** subset (LDC2006T06; type table in
@@ -20,13 +20,48 @@ Scope is deliberately small: people ↔ collective entities, people ↔ people, 
 | `business_associate` | "colleague"     | PER-SOC.Business (symmetric)                           | P1327                        | PERSON ↔ PERSON            |
 | `personal_relation`  | "friend"        | PER-SOC.Lasting-Personal (symmetric)                   | none                         | PERSON ↔ PERSON            |
 | `located_in`         | "located in"    | PHYS.Located + GEN-AFF.Org-Location + PART-WHOLE.Geographical | P131, P159, P276      | ORG, FAC, GPE, LOC → GPE, LOC, FAC |
+| `resident_of`        | "lives in"      | GEN-AFF.Citizen-Resident-Religion-Ethnicity            | P551 residence, P27 citizenship | PERSON → GPE, LOC       |
+
+## Pair categories (v2.2)
+
+The output is **pair-centric**: which two entities are related, with a confidence score. The
+relation name is a secondary *qualifier*. `pair_categories` in the schema defines four categories
+by endpoint type:
+
+| category  | directed | head                        | tail          | qualifiers                                  |
+| --------- | -------- | --------------------------- | ------------- | ------------------------------------------- |
+| `place`   | yes      | PERSON, ORG, FAC, GPE, LOC  | GPE, LOC, FAC | located_in, resident_of                     |
+| `per_per` | no       | PERSON                      | PERSON        | family, business_associate, personal_relation |
+| `org_org` | no       | ORG                         | ORG           | subsidiary_of, member_of, founder_of        |
+| `per_org` | no       | PERSON                      | ORG           | employee_of, member_of, founder_of          |
+
+Each category has a `threshold`. It is `null` until tuned on the gold dev split (see
+`docs/relation-accuracy.md`); `null` falls back to the global `threshold`.
 
 ## Design notes
 
-- **Two passes of four.** The CoreML relation head is R4 and the bucket allows Q ≤ 8, so the
-  relations run as passes `affiliation` and `social_place`, on top of the entity pass: three model
-  calls per window. All engines run the same passes so they stay comparable. Measured prompt cost
-  is 57–64 subword tokens per pass, within the 65-token budget `data/windows.jsonl` was sized for.
+- **Three passes of three (v2.2).** The CoreML relation head is R4 and the bucket allows Q ≤ 8,
+  so relations run in passes of at most four. v2.2 groups them by pair category:
+  - `per_org`: employee_of, member_of, founder_of;
+  - `org_place`: subsidiary_of, located_in, resident_of;
+  - `per_per`: family, business_associate, personal_relation.
+
+  With the entity pass, that is **four model calls per window, up from three** in v2.1 (passes
+  `affiliation` and `social_place`, four relations each; frozen in `schema/ontonotes-v2.1.json`).
+  The Experiments step measures v2.1 against v2.2 for accuracy and latency.
+
+  All engines run the same passes, so they stay comparable. Measured prompt cost with
+  `windowing.py::measure_schema_cost`, using the model's own collator and empty text:
+
+  | pass | v2.1 tokens | v2.2 tokens |
+  |---|---|---|
+  | entities | 59 | 59 |
+  | `affiliation` / `per_org` | 60 | 45 |
+  | `social_place` / `org_place` | 57 | 46 |
+  | `per_per` | | 42 |
+
+  Every pass is within the 65-token budget that `data/windows.jsonl` was sized for, so the
+  windows stay valid.
 - **`name` vs `prompt`.** `name` is the canonical output id. `prompt` is the text sent to the
   model, and its wording is an experiment knob to tune on `eval/gold.jsonl`.
 - **Typed endpoints.** `head`/`tail` hold OntoNotes types. GLiNER2.5's `JointIE` decoder
@@ -39,6 +74,8 @@ Scope is deliberately small: people ↔ collective entities, people ↔ people, 
   employment with a start date) are a better fit for GLiNER2.5 records/structures later.
 - **Folded subtypes.** `located_in` merges three ACE subtypes that differ mainly by argument type.
   The specific Wikidata property (P131/P159/P276) can be derived from the endpoint types.
+- **`resident_of` promoted (v2.2).** Without it, person → place had no relation, so the `place`
+  category could not cover people.
 - **Optional extensions** (`relations_optional` in the schema, not run): `owner_of`
-  (ORG-AFF.Ownership/Investor-Shareholder, P127 inverse), `alumnus_of` (ORG-AFF.Student-Alum,
-  P69), `resident_of` (GEN-AFF.Citizen-Resident, P27/P551).
+  (ORG-AFF.Ownership/Investor-Shareholder, P127 inverse) and `alumnus_of` (ORG-AFF.Student-Alum,
+  P69).

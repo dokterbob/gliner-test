@@ -1,9 +1,9 @@
 {
-  "$comment": "Single source of truth for labels used by ALL engines (CoreML, gliner25-rs, torch). Entities: OntoNotes 5.0 subset; `label` is the natural-language prompt sent to GLiNER, `ontonotes` the tag it maps back to. Relations: a small ACE 2005 subset (canonical type + argument typing) cross-referenced to Wikidata properties (FewRel/T-REx/Shimorina-DB compatible). `name` is the canonical output id; `prompt` is the text sent to the model (wording is an experiment knob). Relations are grouped into `pass`es of <= 4 because the CoreML relation head is R4 and the bucket is Q<=8; every engine runs the same passes. `head`/`tail` are OntoNotes types for typed decoding (JointIE) or post-filtering. Direction follows ACE Arg1->Arg2 / Wikidata subject->object; `wikidata_inverse: true` means the Wikidata property points tail->head. Descriptions are not sent to the model (they overflow the 128-token bucket).",
-  "version": "2.1",
+  "$comment": "Single source of truth for labels used by ALL engines (CoreML, gliner25-rs, torch). Entities: OntoNotes 5.0 subset; `label` is the natural-language prompt sent to GLiNER, `ontonotes` the tag it maps back to. Relations: a small ACE 2005 subset (canonical type + argument typing) cross-referenced to Wikidata properties (FewRel/T-REx/Shimorina-DB compatible). `name` is the canonical output id; `prompt` is the text sent to the model (wording is an experiment knob). Relations are grouped into `pass`es of <= 4 because the CoreML relation head is R4 and the bucket is Q<=8; every engine runs the same passes. `head`/`tail` are OntoNotes types for typed decoding (JointIE) or post-filtering. Direction follows ACE Arg1->Arg2 / Wikidata subject->object; `wikidata_inverse: true` means the Wikidata property points tail->head. Descriptions are not sent to the model (they overflow the 128-token bucket). v2.2: relations are regrouped into one pass per pair category (per_org / org_place / per_per, 3 relations each; 1 entity + 3 relation calls per window), `resident_of` is promoted from relations_optional, and `pair_categories` defines the pair-centric output (which entities are related, with a confidence; the relation name is a secondary qualifier). Per-category `threshold` is null until tuned on gold dev (docs/relation-accuracy.md); null means fall back to the global `threshold`. The frozen v2.1 grouping is in schema/ontonotes-v2.1.json.",
+  "version": "2.2",
   "ontology": {
-    "entities": "OntoNotes 5.0 (subset)",
-    "relations": "ACE 2005 (LDC2006T06) subset, mapped to Wikidata properties"
+      "entities": "OntoNotes 5.0 (subset)",
+      "relations": "ACE 2005 (LDC2006T06) subset, mapped to Wikidata properties"
   },
   "entities": [
     {"ontonotes": "PERSON", "label": "person", "description": "People, including fictional"},
@@ -15,46 +15,27 @@
     {"ontonotes": "DATE", "label": "date", "description": "Absolute or relative dates or periods"},
     {"ontonotes": "TIME", "label": "time", "description": "Times smaller than a day (clock times, datetimes)"}
   ],
-  "relation_passes": ["affiliation", "social_place"],
+  "relation_passes": ["per_org", "org_place", "per_per"],
   "relations": [
-    {"name": "employee_of", "prompt": "works for", "pass": "affiliation",
-     "ace2005": "ORG-AFF.Employment", "wikidata": ["P108"], "wikidata_inverse": false, "symmetric": false,
-     "head": ["PERSON"], "tail": ["ORG", "GPE"],
-     "description": "head person is employed by, works for or holds a position at tail organization or government"},
-    {"name": "member_of", "prompt": "member of", "pass": "affiliation",
-     "ace2005": "ORG-AFF.Membership (+ Sports-Affiliation)", "wikidata": ["P463", "P102", "P54"], "wikidata_inverse": false, "symmetric": false,
-     "head": ["PERSON", "ORG", "GPE"], "tail": ["ORG"],
-     "description": "head is a member of tail organization, party, club or team (not employment)"},
-    {"name": "founder_of", "prompt": "founder of", "pass": "affiliation",
-     "ace2005": "ORG-AFF.Founder", "wikidata": ["P112"], "wikidata_inverse": true, "symmetric": false,
-     "head": ["PERSON", "ORG"], "tail": ["ORG"],
-     "description": "head person or organization founded or co-founded tail organization"},
-    {"name": "subsidiary_of", "prompt": "subsidiary of", "pass": "affiliation",
-     "ace2005": "PART-WHOLE.Subsidiary", "wikidata": ["P749"], "wikidata_inverse": false, "symmetric": false,
-     "head": ["ORG"], "tail": ["ORG", "GPE"],
-     "description": "head organization is a subsidiary, division or department of tail organization"},
-
-    {"name": "family", "prompt": "family", "pass": "social_place",
-     "ace2005": "PER-SOC.Family", "wikidata": ["P26", "P40", "P22", "P25", "P3373", "P1038"], "wikidata_inverse": false, "symmetric": true,
-     "head": ["PERSON"], "tail": ["PERSON"],
-     "description": "head and tail are family: spouse, parent/child, sibling or other relative"},
-    {"name": "business_associate", "prompt": "colleague", "pass": "social_place",
-     "ace2005": "PER-SOC.Business", "wikidata": ["P1327"], "wikidata_inverse": false, "symmetric": true,
-     "head": ["PERSON"], "tail": ["PERSON"],
-     "description": "head and tail have a professional relationship: colleagues, manager/report, business partners, client"},
-    {"name": "personal_relation", "prompt": "friend", "pass": "social_place",
-     "ace2005": "PER-SOC.Lasting-Personal", "wikidata": [], "wikidata_inverse": false, "symmetric": true,
-     "head": ["PERSON"], "tail": ["PERSON"],
-     "description": "head and tail have a lasting personal (non-family, non-business) relationship: friends, neighbours"},
-    {"name": "located_in", "prompt": "located in", "pass": "social_place",
-     "ace2005": "PHYS.Located + GEN-AFF.Org-Location + PART-WHOLE.Geographical", "wikidata": ["P131", "P159", "P276"], "wikidata_inverse": false, "symmetric": false,
-     "head": ["ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"],
-     "description": "head organization, facility or place is located or headquartered in tail place"}
+    {"name": "employee_of", "prompt": "works for", "pass": "per_org", "ace2005": "ORG-AFF.Employment", "wikidata": ["P108"], "wikidata_inverse": false, "symmetric": false, "head": ["PERSON"], "tail": ["ORG", "GPE"], "description": "head person is employed by, works for or holds a position at tail organization or government"},
+    {"name": "member_of", "prompt": "member of", "pass": "per_org", "ace2005": "ORG-AFF.Membership (+ Sports-Affiliation)", "wikidata": ["P463", "P102", "P54"], "wikidata_inverse": false, "symmetric": false, "head": ["PERSON", "ORG", "GPE"], "tail": ["ORG"], "description": "head is a member of tail organization, party, club or team (not employment)"},
+    {"name": "founder_of", "prompt": "founder of", "pass": "per_org", "ace2005": "ORG-AFF.Founder", "wikidata": ["P112"], "wikidata_inverse": true, "symmetric": false, "head": ["PERSON", "ORG"], "tail": ["ORG"], "description": "head person or organization founded or co-founded tail organization"},
+    {"name": "subsidiary_of", "prompt": "subsidiary of", "pass": "org_place", "ace2005": "PART-WHOLE.Subsidiary", "wikidata": ["P749"], "wikidata_inverse": false, "symmetric": false, "head": ["ORG"], "tail": ["ORG", "GPE"], "description": "head organization is a subsidiary, division or department of tail organization"},
+    {"name": "located_in", "prompt": "located in", "pass": "org_place", "ace2005": "PHYS.Located + GEN-AFF.Org-Location + PART-WHOLE.Geographical", "wikidata": ["P131", "P159", "P276"], "wikidata_inverse": false, "symmetric": false, "head": ["ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"], "description": "head organization, facility or place is located or headquartered in tail place"},
+    {"name": "resident_of", "prompt": "lives in", "pass": "org_place", "ace2005": "GEN-AFF.Citizen-Resident-Religion-Ethnicity", "wikidata": ["P551", "P27"], "wikidata_inverse": false, "symmetric": false, "head": ["PERSON"], "tail": ["GPE", "LOC"], "description": "head person lives in, resides in or is a citizen of tail place"},
+    {"name": "family", "prompt": "family", "pass": "per_per", "ace2005": "PER-SOC.Family", "wikidata": ["P26", "P40", "P22", "P25", "P3373", "P1038"], "wikidata_inverse": false, "symmetric": true, "head": ["PERSON"], "tail": ["PERSON"], "description": "head and tail are family: spouse, parent/child, sibling or other relative"},
+    {"name": "business_associate", "prompt": "colleague", "pass": "per_per", "ace2005": "PER-SOC.Business", "wikidata": ["P1327"], "wikidata_inverse": false, "symmetric": true, "head": ["PERSON"], "tail": ["PERSON"], "description": "head and tail have a professional relationship: colleagues, manager/report, business partners, client"},
+    {"name": "personal_relation", "prompt": "friend", "pass": "per_per", "ace2005": "PER-SOC.Lasting-Personal", "wikidata": [], "wikidata_inverse": false, "symmetric": true, "head": ["PERSON"], "tail": ["PERSON"], "description": "head and tail have a lasting personal (non-family, non-business) relationship: friends, neighbours"}
   ],
   "relations_optional": [
     {"name": "owner_of", "ace2005": "ORG-AFF.Ownership + ORG-AFF.Investor-Shareholder", "wikidata": ["P127"], "wikidata_inverse": true, "head": ["PERSON", "ORG", "GPE"], "tail": ["ORG", "FAC"]},
-    {"name": "alumnus_of", "ace2005": "ORG-AFF.Student-Alum", "wikidata": ["P69"], "wikidata_inverse": false, "head": ["PERSON"], "tail": ["ORG"]},
-    {"name": "resident_of", "ace2005": "GEN-AFF.Citizen-Resident-Religion-Ethnicity", "wikidata": ["P27", "P551"], "wikidata_inverse": false, "head": ["PERSON"], "tail": ["GPE", "NORP"]}
+    {"name": "alumnus_of", "ace2005": "ORG-AFF.Student-Alum", "wikidata": ["P69"], "wikidata_inverse": false, "head": ["PERSON"], "tail": ["ORG"]}
+  ],
+  "pair_categories": [
+    {"id": "place", "directed": true, "head": ["PERSON", "ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"], "qualifiers": ["located_in", "resident_of"], "threshold": null},
+    {"id": "per_per", "directed": false, "head": ["PERSON"], "tail": ["PERSON"], "qualifiers": ["family", "business_associate", "personal_relation"], "threshold": null},
+    {"id": "org_org", "directed": false, "head": ["ORG"], "tail": ["ORG"], "qualifiers": ["subsidiary_of", "member_of", "founder_of"], "threshold": null},
+    {"id": "per_org", "directed": false, "head": ["PERSON"], "tail": ["ORG"], "qualifiers": ["employee_of", "member_of", "founder_of"], "threshold": null}
   ],
   "threshold": 0.5
 }
