@@ -595,6 +595,26 @@ def cmd_pool_cands(args) -> None:
     print(f"{len(cands)} candidates")
 
 
+def cmd_pool_apply(args) -> None:
+    """Turn accepted pool-review verdicts into extra pairs (source=pool) for `adjudicate --extra`."""
+    cands = {c["cand_id"]: c for c in read_jsonl(args.cands)}
+    verdicts = []
+    for f in args.reviews:
+        verdicts += [v for v in extract_json_lines(Path(f).read_text()) if "cand_id" in v]
+    extra, rows = defaultdict(list), []
+    for v in verdicts:
+        c = cands[v["cand_id"]]
+        quals = [q for q in v.get("qualifiers", []) if q in load_categories()[c["category"]]["qualifiers"]]
+        rows.append({**v, "id": c["id"], "category": c["category"], "head": c["head"]["text"], "tail": c["tail"]["text"]})
+        if v["verdict"] == "accept" and quals:
+            extra[c["id"]].append({"category": c["category"], "head": {k: c["head"][k] for k in ("text", "start", "end", "label")},
+                                   "tail": {k: c["tail"][k] for k in ("text", "start", "end", "label")},
+                                   "qualifiers": quals, "source": "pool"})
+    Path(args.out).write_text(json.dumps(extra, indent=1, ensure_ascii=False))
+    write_jsonl(args.review_out, rows)
+    print(f"{len(verdicts)} verdicts, {sum(len(x) for x in extra.values())} accepted")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -629,6 +649,12 @@ def main() -> None:
     p.add_argument("--decisions", default=ROOT / "eval/annotation/decisions.json")
     p.add_argument("--extra"); p.add_argument("--out", default=ROOT / "eval/annotation/adjudicated.jsonl")
     p.set_defaults(fn=cmd_adjudicate)
+    p = sub.add_parser("pool-apply")
+    p.add_argument("--cands", default=ROOT / "eval/annotation/pool-candidates.jsonl")
+    p.add_argument("--reviews", nargs="+", required=True)
+    p.add_argument("--out", default=ROOT / "eval/annotation/pool-extra.json")
+    p.add_argument("--review-out", default=ROOT / "eval/annotation/pool-review.jsonl")
+    p.set_defaults(fn=cmd_pool_apply)
     p = sub.add_parser("build")
     p.add_argument("--adjudicated", default=ROOT / "eval/annotation/adjudicated.jsonl")
     p.add_argument("--out", default=ROOT / "eval/gold.jsonl")

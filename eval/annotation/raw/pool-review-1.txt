@@ -1,0 +1,42 @@
+{"cand_id": "c000", "verdict": "reject", "qualifiers": [], "evidence": "'met German Chancellor officials in Berlin' is an event location, not residence or location of Nadella"}
+{"cand_id": "c001", "verdict": "reject", "qualifiers": [], "evidence": "'connects San Francisco to Marin County' is a connection, not containment; no located_in for the bridge"}
+{"cand_id": "c002", "verdict": "reject", "qualifiers": [], "evidence": "'visited the United Nations headquarters' is a visit; no employee_of or member_of stated"}
+{"cand_id": "c003", "verdict": "reject", "qualifiers": [], "evidence": "'visited the United Nations headquarters in New York' is an event location, not residence"}
+{"cand_id": "c004", "verdict": "reject", "qualifiers": [], "evidence": "'sprak ... met de NATO' is a meeting/talk, not a per_org relation"}
+{"cand_id": "c005", "verdict": "reject", "qualifiers": [], "evidence": "'sprak dinsdag om 15.00 uur met de NATO in Brussel' attaches 'in Brussel' to the event; NATO HQ location is world knowledge; ORG-to-GPE pair not stated"}
+{"cand_id": "c006", "verdict": "reject", "qualifiers": [], "evidence": "'de voormalige premier van Nederland' is an office held, not residence or located_in; no place category qualifier fits"}
+{"cand_id": "c007", "verdict": "reject", "qualifiers": [], "evidence": "'ASML, gevestigd in Veldhoven, werd opgericht door Martin van den Brink' links Veldhoven to ASML, not to Van den Brink; founding is a founder_of pair with ASML, not with Veldhoven"}
+{"cand_id": "c008", "verdict": "reject", "qualifiers": [], "evidence": "'bezocht de haven van Rotterdam' is a visit; no residence or located_in for the person"}
+{"cand_id": "c009", "verdict": "reject", "qualifiers": [], "evidence": "'traf sich ... mit Vertretern der Europäischen Union' is a meeting; no per_org relation"}
+{"cand_id": "c010", "verdict": "reject", "qualifiers": [], "evidence": "'mit Vertretern der Europäischen Union in Berlin' places the meeting, an event location; not located_in"}
+{"cand_id": "c011", "verdict": "reject", "qualifiers": [], "evidence": "'traf sich ... in Berlin' is an event location for the meeting, not residence"}
+{"cand_id": "c012", "verdict": "reject", "qualifiers": [], "evidence": "'wurde 1847 von Werner von Siemens in München gegründet' is the founding place (event), not located_in"}
+{"cand_id": "c013", "verdict": "reject", "qualifiers": [], "evidence": "'von Werner von Siemens in München gegründet' is the founding place, an event; no residence or located_in"}
+{"cand_id": "c014", "verdict": "reject", "qualifiers": [], "evidence": "'a rencontré le chancelier allemand à Paris' is an event location"}
+{"cand_id": "c015", "verdict": "reject", "qualifiers": [], "evidence": "'construite par Gustave Eiffel, se trouve à Paris' places the tower in Paris; Gustave Eiffel is not stated to live or be located in Paris"}
+{"cand_id": "c016", "verdict": "reject", "qualifiers": [], "evidence": "'livré par Airbus à la compagnie Air France' is a delivery deal between two ORGs, not a relation"}
+{"cand_id": "c017", "verdict": "reject", "qualifiers": [], "evidence": "'founded Amazon in Seattle in 1994' is a founding event; 'headquartered near the Space Needle' is nearness, not containment in Seattle"}
+{"cand_id": "c018", "verdict": "reject", "qualifiers": [], "evidence": "'founded Amazon in Seattle in 1994' is a founding event location; no resident_of stated"}
+{"cand_id": "c019", "verdict": "reject", "qualifiers": [], "evidence": "'the European Union was founded in Maastricht in 1993' is a founding event location, not located_in"}
+{"cand_id": "c020", "verdict": "reject", "qualifiers": [], "evidence": "'opened the new wing of the Van Gogh Museum' states no location; Museum in Netherlands is world knowledge"}
+{"cand_id": "c021", "verdict": "reject", "qualifiers": [], "evidence": "'Queen Máxima of the Netherlands' is a title/office, not residence; the text does not say she lives there"}
+{"cand_id": "c022", "verdict": "reject", "qualifiers": [], "evidence": "'Google and the European Commission settled the antitrust case' is a dealing between ORGs, excluded by 2.5"}
+{"cand_id": "c023", "verdict": "reject", "qualifiers": [], "evidence": "'attended the premiere in Los Angeles' is an event location, not residence"}
+{"cand_id": "c024", "verdict": "reject", "qualifiers": [], "evidence": "'attended the premiere in Los Angeles' is an event location, not residence"}
+{"cand_id": "c025", "verdict": "reject", "qualifiers": [], "evidence": "'Timothée Chalamet and Zendaya attended the premiere' is co-attendance at an event, with no stated relation"}
+{"cand_id": "c026", "verdict": "reject", "qualifiers": [], "evidence": "'Microsoft's Redmond campus' has Microsoft containing the campus, the reverse of the required direction; for an ORG head the campus would need to be the contained thing"}
+{"cand_id": "c027", "verdict": "reject", "qualifiers": [], "evidence": "'Switzerland is not part of the European Union, though Geneva hosts the World Health Organization' gives no Geneva-Switzerland containment (negation and co-mention)"}
+{"cand_id": "c028", "verdict": "reject", "qualifiers": [], "evidence": "'lid van de D66-fractie in de Tweede Kamer' places the faction in the House by a location-like prepositional phrase; membership or subsidiary of the Kamer is not stated explicitly, so borderline and left out"}
+{"cand_id": "c029", "verdict": "reject", "qualifiers": [], "evidence": "'zakenpartners bij hun adviesbureau in Gent' places the unnamed adviesbureau in Gent; Jan Peeters is not stated to live or be located there"}
+{"cand_id": "c030", "verdict": "reject", "qualifiers": [], "evidence": "'zakenpartners bij hun adviesbureau in Gent' places the unnamed adviesbureau in Gent; Tom Dumon is not stated to live or be located there"}
+{"cand_id": "c031", "verdict": "reject", "qualifiers": [], "evidence": "'performed at the same festival where Dua Lipa also played' is co-mention on the same bill"}
+{"cand_id": "c032", "verdict": "reject", "qualifiers": [], "evidence": "'was op dezelfde persconferentie als Ronald Koeman' is co-attendance at an event"}
+{"cand_id": "c033", "verdict": "reject", "qualifiers": [], "evidence": "'spielten im selben Turnier, aber nie im selben Team' is co-participation in a tournament with a negated team tie; no per_per relation"}
+{"cand_id": "c034", "verdict": "reject", "qualifiers": [], "evidence": "'ont grandi dans la même ville sans jamais se rencontrer' is shared origin, explicitly without any relation"}
+{"cand_id": "c035", "verdict": "reject", "qualifiers": [], "evidence": "'Sync at the Rotterdam office' places the meeting, an event location; Priya Raman is not stated to be located or resident there"}
+{"cand_id": "c036", "verdict": "reject", "qualifiers": [], "evidence": "'Sync at the Rotterdam office' places the meeting, an event location; Tomasz Wiecek is not stated to be located or resident there"}
+{"cand_id": "c037", "verdict": "reject", "qualifiers": [], "evidence": "'Sync at the Rotterdam office' places the meeting, an event location; Lena Hartmann is not stated to be located or resident there"}
+{"cand_id": "c038", "verdict": "reject", "qualifiers": [], "evidence": "'Hi Ruth, this is Samuel Brandt ... Could you two talk next week?' states no relation between Brandt and Ruth"}
+{"cand_id": "c039", "verdict": "reject", "qualifiers": [], "evidence": "'He is looking for a partner in Ghent' says Samuel Brandt seeks a partner there; nothing places Marcus in Ghent"}
+{"cand_id": "c040", "verdict": "reject", "qualifiers": [], "evidence": "'Ostrava Freight Systems is a subsidiary of Meridian Logistics Group' and 'Their HQ is still in Ostrava' link Ostrava to Ostrava Freight Systems, not to Meridian; the direction is wrong for place"}
+{"cand_id": "c041", "verdict": "reject", "qualifiers": [], "evidence": "'Her brother Idris is still in Antwerp' gives Idris a location; 'Vantra Dynamics' is Hana's new job; no employment of Idris is stated"}

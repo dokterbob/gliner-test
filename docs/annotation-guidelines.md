@@ -227,6 +227,23 @@ Entities are in `[brackets]`; pairs are written `category | head -> tail | quali
   tail while `Rotterdam` is inside the `ORG` span. Under rule 1.1 `Rotterdam` is not a separate
   entity, so **that pair is dropped**; the sentence has no pair. The `Amsterdam`/Port Authority
   accord is a dealing (3.5).
+- `gold-0041` ("founded Amazon in Seattle in 1994; ... headquartered near the Space Needle"): the
+  v2.1 pair `Amazon located_in Seattle` is **dropped**: "founded in Seattle" is a founding place
+  (3.3) and "near the Space Needle" is nearness (3.6).
+- Conventions fixed during adjudication of v3 (apply to all items):
+  - a time expression includes its unit word (`10:00 Uhr`, `15.00 uur`); durations and frequencies
+    ("jaren", "nightly", "de longue date") are `DATE`;
+  - the German genitive `-s` stays inside the token (`Volkswagen-Konzerns`);
+  - generic descriptors are not part of a name (`Start-up Vektorlabor` -> `Vektorlabor`); a library or
+    museum named after a city (`médiathèque de Charleroi`) is one `ORG` (rule 1.1);
+  - names of events and conferences (`Taalwerk Congres`) are not `ORG`;
+  - "headquarters/HQ/office in X" and a postal address attached to an organisation give `located_in`;
+    an anaphor that clearly refers to the organisation ("Their HQ is still in Ostrava") counts;
+  - "sits on the board of X" is `member_of`;
+  - kin words with a signed or named speaker (`Onkel Stefan` in a mail signed `Hannes`) give `family`
+    with the signature name, consistent with `Meine Schwester Judith`;
+  - the same fact may appear for coreferent mentions (`Pelgrim` / `Pelgrim Techniek`); the evidence
+    mention is annotated by the annotators and a full-name alias may be added by pooling.
 - Any other pair recorded in v2.1 is re-judged from scratch against these rules; v2.1 is frozen at
   `eval/annotation/gold-v2.1.jsonl` and was never shown to annotators.
 

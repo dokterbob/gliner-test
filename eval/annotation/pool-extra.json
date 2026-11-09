@@ -1,0 +1,44 @@
+{
+ "gold-p-en-06": [
+  {
+   "category": "place",
+   "head": {
+    "text": "Idris",
+    "start": 97,
+    "end": 102,
+    "label": "PERSON"
+   },
+   "tail": {
+    "text": "Antwerp",
+    "start": 115,
+    "end": 122,
+    "label": "GPE"
+   },
+   "qualifiers": [
+    "resident_of"
+   ],
+   "source": "pool"
+  }
+ ],
+ "gold-p-nl-09": [
+  {
+   "category": "place",
+   "head": {
+    "text": "Pelgrim Techniek",
+    "start": 23,
+    "end": 39,
+    "label": "ORG"
+   },
+   "tail": {
+    "text": "Groningen",
+    "start": 191,
+    "end": 200,
+    "label": "GPE"
+   },
+   "qualifiers": [
+    "located_in"
+   ],
+   "source": "pool"
+  }
+ ]
+}

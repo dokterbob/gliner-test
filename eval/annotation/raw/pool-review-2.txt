@@ -1,0 +1,41 @@
+{"cand_id": "c042", "verdict": "reject", "qualifiers": [], "evidence": "Text says Hana, not Lukas, took a new job at Vantra Dynamics; Lukas is only the cousin who reports it."}
+{"cand_id": "c043", "verdict": "reject", "qualifiers": [], "evidence": "'cousin Hana just moved to Utrecht'; nothing places Lukas in Utrecht."}
+{"cand_id": "c044", "verdict": "reject", "qualifiers": [], "evidence": "Antwerp is mentioned only for Idris; no statement links Lukas to Antwerp."}
+{"cand_id": "c045", "verdict": "reject", "qualifiers": [], "evidence": "'Her brother Idris is still in Antwerp'; Idris is not stated to be in Utrecht."}
+{"cand_id": "c046", "verdict": "accept", "qualifiers": ["resident_of"], "evidence": "'Her brother Idris is still in Antwerp' (contrasted with Hana having 'just moved to Utrecht', so a residence reading is clearly entailed)."}
+{"cand_id": "c047", "verdict": "reject", "qualifiers": [], "evidence": "Antwerp is stated for Idris only; Hana's location is Utrecht."}
+{"cand_id": "c048", "verdict": "reject", "qualifiers": [], "evidence": "Lukas and Idris are only linked through Hana ('his cousin Hana', 'Her brother Idris'); no direct relation is stated."}
+{"cand_id": "c049", "verdict": "accept", "qualifiers": ["family"], "evidence": "'Her brother Idris'"}
+{"cand_id": "c050", "verdict": "reject", "qualifiers": [], "evidence": "'Corvid Biotech ... is headquartered in Leiden' places the company, not Dr. Samuel Brandt, in Leiden."}
+{"cand_id": "c051", "verdict": "reject", "qualifiers": [], "evidence": "'Reported by Anouk Verhoeven during the Brussels data sprint' is an event location, not residence or containment."}
+{"cand_id": "c052", "verdict": "reject", "qualifiers": [], "evidence": "'her brother Pieter Smits is moving to Gdansk'; Ines's own location is not Gdansk."}
+{"cand_id": "c053", "verdict": "reject", "qualifiers": [], "evidence": "'Pieter Smits is moving to Gdansk in June for work' is a future plan, not a stated residence."}
+{"cand_id": "c054", "verdict": "reject", "qualifiers": [], "evidence": "'Sanne de Vries en Ahmed El Idrissi bespraken de offerte voor Veldmann Logistiek' is a meeting about a quote, not an employment or membership link."}
+{"cand_id": "c055", "verdict": "reject", "qualifiers": [], "evidence": "Ahmed El Idrissi is only named as a meeting participant discussing an offer for Veldmann Logistiek; no employment is stated."}
+{"cand_id": "c056", "verdict": "reject", "qualifiers": [], "evidence": "'Sanne de Vries en Ahmed El Idrissi bespraken' is co-attendance at a meeting; no relation is stated."}
+{"cand_id": "c057", "verdict": "reject", "qualifiers": [], "evidence": "'ik woon sinds 1 september in Utrecht' is said by the writer, not by Lotte, the addressee."}
+{"cand_id": "c058", "verdict": "reject", "qualifiers": [], "evidence": "'Dataverk B.V. is gevestigd in Eindhoven' is about the company; Bakker is only the addressee with no stated link to Dataverk."}
+{"cand_id": "c059", "verdict": "reject", "qualifiers": [], "evidence": "'Dataverk B.V. is gevestigd in Eindhoven'; the Eindhoven location is the company's, not Bakker's."}
+{"cand_id": "c060", "verdict": "reject", "qualifiers": [], "evidence": "'bij Stroomlijn Analytics in Amersfoort'; Amersfoort attaches to the company, and Mark Visser is not stated to live or be based there."}
+{"cand_id": "c061", "verdict": "reject", "qualifiers": [], "evidence": "'spraken we af in Berlijn bij de borrel' is an event location."}
+{"cand_id": "c062", "verdict": "reject", "qualifiers": [], "evidence": "'spraken we af in Berlijn bij de borrel'; Berlin is only an event location for Ilse Mertens."}
+{"cand_id": "c063", "verdict": "reject", "qualifiers": [], "evidence": "'Ruben Schouten en Ilse Mertens schoven aan' is co-attendance; no relation is stated."}
+{"cand_id": "c064", "verdict": "reject", "qualifiers": [], "evidence": "Rutger Smits is only the signature; no employment, founding or membership link to Pelgrim Techniek is stated for him."}
+{"cand_id": "c065", "verdict": "reject", "qualifiers": [], "evidence": "Rutger Smits is only the signature; no link to Noordhaven Holding is stated for him."}
+{"cand_id": "c066", "verdict": "accept", "qualifiers": ["located_in"], "evidence": "'Het hoofdkantoor van Pelgrim staat in Groningen' (Pelgrim = Pelgrim Techniek)"}
+{"cand_id": "c067", "verdict": "reject", "qualifiers": [], "evidence": "Rutger Smits is only the signature; Groningen is stated for the company's headquarters, not for him."}
+{"cand_id": "c068", "verdict": "reject", "qualifiers": [], "evidence": "'Anwesend: Clemens Wagner und Ruth Pichler' is co-attendance; no relation is stated."}
+{"cand_id": "c069", "verdict": "reject", "qualifiers": [], "evidence": "'Anwesend: Clemens Wagner und Ruth Pichler' is co-attendance; no relation is stated."}
+{"cand_id": "c070", "verdict": "reject", "qualifiers": [], "evidence": "'Rhätia Datentechnik AG mit Sitz in Zürich' places the company in Zürich; Nina Brunner's residence is not stated."}
+{"cand_id": "c071", "verdict": "reject", "qualifiers": [], "evidence": "'Jonas ist letzte Woche nach Graz gezogen' places Jonas in Graz; Kitzbühel is only a winter trip destination."}
+{"cand_id": "c072", "verdict": "reject", "qualifiers": [], "evidence": "'Sabine Kraus von der Hochschule Ennstal'; Sabine is linked to Hochschule Ennstal, not Vektorlabor."}
+{"cand_id": "c073", "verdict": "reject", "qualifiers": [], "evidence": "'Tobias Moser vom Start-up Vektorlabor'; Tobias is linked to Vektorlabor, not Hochschule Ennstal."}
+{"cand_id": "c074", "verdict": "reject", "qualifiers": [], "evidence": "'der Brenner Holding AG mit Sitz in Innsbruck' places the holding, not Nordlicht Logistik GmbH, in Innsbruck."}
+{"cand_id": "c075", "verdict": "reject", "qualifiers": [], "evidence": "'Sie ist meine Teamkollegin im Datenschutz und arbeitet seit 2022 dort': 'dort' most plausibly refers to the writer's company, not Alpenmoos Software GmbH, which is only the contract counterparty."}
+{"cand_id": "c076", "verdict": "reject", "qualifiers": [], "evidence": "'Die Gründerin Elke Feurstein hat die Firma 2014 in Salzburg gegründet' gives the founding place, an event location, not residence or containment."}
+{"cand_id": "c077", "verdict": "reject", "qualifiers": [], "evidence": "Marc and Hélène Varlet are linked only by Anne's message about a client file; no relation between them is stated."}
+{"cand_id": "c078", "verdict": "reject", "qualifiers": [], "evidence": "'ont assisté à la même séance ... sans se connaître' is co-attendance and explicitly no acquaintance."}
+{"cand_id": "c079", "verdict": "reject", "qualifiers": [], "evidence": "'Elle est ma meilleure amie' is the writer's friendship with Nadia; no Camille-Nadia relation is stated."}
+{"cand_id": "c080", "verdict": "reject", "qualifiers": [], "evidence": "'On s'est vus à Lyon samedi soir, au concert de Ludovic' is an event location, not residence."}
+{"cand_id": "c081", "verdict": "reject", "qualifiers": [], "evidence": "'Élise Fontaine, ingénieure chez Corvane SA, et Théo Brunet, journaliste indépendant'; Théo is described as independent, with no link to Corvane SA."}
+{"cand_id": "c082", "verdict": "reject", "qualifiers": [], "evidence": "'Ils ne se connaissaient pas avant la session' and both attended the same forum; no relation is stated."}
