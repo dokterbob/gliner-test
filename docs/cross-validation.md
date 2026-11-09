@@ -336,7 +336,7 @@ but unrelated uses of "graph" (ONNX computation graphs) and "crossings"
 missing relation-scorer weights *and* the missing graph-consistency decoder
 — not merely an unimplemented convenience.
 
-## 4. GPE/LOC label wording (optional, torch only, gold only — `schema/ontonotes.json` untouched)
+## 4. GPE/LOC label wording (adopted as schema v2.1)
 
 Both engines read the same schema, so the GPE/LOC confusion flagged
 previously (the `location` and `country, city or state` prompts competing
@@ -352,6 +352,28 @@ touching the shared file), torch only, gold only, overlap match:
 More than doubles both. This is a cheap, high-leverage knob for whoever owns
 `schema/ontonotes.json` next — reported here as numbers only, per the
 instruction not to change the shared file.
+
+**Follow-up (coordinator): adopted as schema v2.1.** The alternative LOC
+prompt above makes the entity pass cost 69 subword tokens, over the
+65-token prompt ceiling that `data/windows.jsonl` was sized for, so it would
+force re-windowing the corpus. Two shorter variants were measured instead,
+with CoreML fp32 (bit-identical to torch here) on the full 84-sentence gold
+set, entity pass prompt cost in parentheses:
+
+| variant (GPE / LOC prompt) | prompt tokens | GPE F1 | LOC F1 | micro F1 exact | micro F1 overlap |
+|---|---|---|---|---|---|
+| v2: "country, city or state" / "location" | 42 | 0.333 | 0.186 | 0.682 | 0.749 |
+| **v2.1: "country, city, state or other political territory" / "geographic feature such as a mountain, river or region"** | **59** | **0.853** | **0.571** | **0.802** | **0.859** |
+| "country, city or other political territory" / "natural geographic feature or region" | 51 | 0.862 | 0.500 | 0.780 | 0.841 |
+| agent's alternative above | 69 | 0.896 | 0.462 | 0.814 | 0.871 |
+
+v2.1 keeps almost all of the gain (+0.12 micro-F1 exact) while fitting the
+existing windows. Relation scores are unchanged, because the relation passes
+don't include entity prompts. Caveats: the gold set is small (34 GPE and only 6 LOC
+spans) and was written in the same session that chose the wording, so treat
+the size of the gain as optimistic. **Corpus-level predictions and agreement numbers
+elsewhere in this document and in `docs/coreml-findings.md` were produced with
+the v2 labels**; gold numbers in this table are v2.1.
 
 ## 5. Latency / resource comparison (CPU, fp32, this VM: M4 Max VM, 4 cores, 8 GB RAM, no ANE)
 
