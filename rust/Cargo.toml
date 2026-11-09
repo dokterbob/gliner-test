@@ -1,0 +1,26 @@
+[package]
+name = "gliner-rust-eval"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "gliner-rust-eval"
+path = "src/main.rs"
+
+[dependencies]
+gliner25-rs = { version = "0.5", default-features = false, features = ["families", "hub"] }
+# gliner25-rs 0.5.6 was written against ort rc.13's API; rc.14/rc.15 made
+# breaking API changes (Session::builder() signature, EnvironmentBuilder,
+# AllocationDevice lifetime). Cargo's default resolver otherwise picks the
+# newest rc satisfying "^2.0.0-rc.13", which silently breaks the build -- pin
+# exactly.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray", "coreml", "half", "std"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+libc = "0.2"
+
+[profile.release]
+debug = true
