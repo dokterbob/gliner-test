@@ -1,0 +1,14 @@
+{
+ "id": "08c-jointie-210-symmetric",
+ "desc": "JointIE gliner2 2.1.0 symmetric=True relations run (4/124 infeasible), unsplit",
+ "schema": "schema/ontonotes.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5
+ }
+}

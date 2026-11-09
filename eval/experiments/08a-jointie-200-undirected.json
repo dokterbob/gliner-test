@@ -1,0 +1,14 @@
+{
+ "id": "08a-jointie-200-undirected",
+ "desc": "JointIE gliner2 2.0.0 --symmetric-mode undirected, unsplit text, rel thr 0.05",
+ "schema": "schema/ontonotes.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "torch-jointie",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5
+ }
+}
