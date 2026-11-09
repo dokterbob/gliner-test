@@ -54,7 +54,7 @@ fp32/fp16-w8's eager construction.
 Full-corpus runs (3450 windows, fp32/cpu and fp16-w8/cpu) confirm the sample numbers:
 fp32 p50 115.5ms / 218.8 words/s over 397.5s total; fp16-w8 p50 68.8ms / 366.7 words/s over
 237.2s total — **fp16-w8 (W8-embedding feature graph + FP16 heads) is ~1.7x faster and uses
-~225MB less peak RSS than fp32, with no measurable quality loss** (see Quality below).
+~225MB less peak RSS than fp32, at 0.966 entity / 0.942 relation F1 agreement with fp32** (see Quality below).
 
 **Compute-units choice (cpu/gpu/ane/all) made no measurable difference, for any precision,
 on this VM.** `scripts/dump_compute_plan.py` confirms why: every operation in every package,
@@ -93,7 +93,7 @@ decode are a small, roughly constant ~1.6–1.8s/900-calls overhead regardless o
    via `ct.models.CompiledMLModel`. Compiling all 13 needed packages took <6s total with `/`
    stable at ~2.7GB free throughout. **Load time: ~11.3s → ~0.6–2.8s** (fp32/fp16-w8;
    variance is construction of 6 CompiledMLModel objects, not recompilation).
-2. **fp16-w8 over fp32**: ~1.7x lower latency, ~225MB lower peak RSS, no quality loss (see
+2. **fp16-w8 over fp32**: ~1.7x lower latency, ~225MB lower peak RSS, 0.966 entity-F1 agreement with fp32 (see
    below) — use it as the default on this VM; see the host section for what changes on
    bare-metal.
 3. **Compute-units tuning**: no effect here (see above) — not worth tuning in the VM, but
@@ -114,8 +114,16 @@ Label distribution (3450 windows, fp32): **ORG 1183, PERSON 251, FAC 114, TIME 1
 LOC 82, GPE 4** — 1110/3450 windows (32%) have ≥1 entity. Relation distribution:
 located_in 122, member_of 91, employee_of 65, subsidiary_of 33, business_associate 10,
 personal_relation 5, founder_of 2, family 0. fp16-w8 gives nearly identical counts (ORG 1150,
-PERSON 253, FAC 107, TIME 112, DATE 93, LOC 73, GPE 4; 1096/3450 windows with entities) —
-consistent with the latency/RSS win above costing no detectable accuracy.
+PERSON 253, FAC 107, TIME 112, DATE 93, LOC 73, GPE 4; 1096/3450 windows with entities).
+
+Span-level agreement of fp16-w8 against fp32 over all 3450 windows
+(`scripts/compare.py --reference coreml-fp32-cpu`): **entity exact-match micro-F1 0.966**
+(P 0.977, R 0.954; per label 0.89 LOC – 1.00 GPE), **relation F1 0.942**, and score diff on
+matched spans mean −0.0013, mean |diff| 0.0095. Exact and overlap match are identical, so
+fp16-w8 never shifts a boundary; it only flips near-threshold (≈0.50–0.65) mentions on or off,
+and those are mostly the code-identifier false positives described below (`CLI`, `HTTP`,
+`store`, `embedder`). Agreement is not accuracy: gold-set scores for both precisions are in
+`docs/cross-validation.md`.
 
 As expected for localdb's own technical docs, ORG dominates and GPE is almost absent.
 Eyeballing the sample:
