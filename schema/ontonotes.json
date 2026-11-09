@@ -32,7 +32,7 @@
     {"name": "alumnus_of", "ace2005": "ORG-AFF.Student-Alum", "wikidata": ["P69"], "wikidata_inverse": false, "head": ["PERSON"], "tail": ["ORG"]}
   ],
   "pair_categories": [
-    {"id": "place", "directed": true, "head": ["PERSON", "ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"], "qualifiers": ["located_in", "resident_of"], "threshold": null},
+    {"id": "place", "directed": true, "head": ["PERSON", "ORG", "FAC", "GPE", "LOC"], "tail": ["GPE", "LOC", "FAC"], "qualifiers": ["located_in", "resident_of"], "qualifier_remap": {"head_type": {"PERSON": {"located_in": "resident_of"}}}, "threshold": null},
     {"id": "per_per", "directed": false, "head": ["PERSON"], "tail": ["PERSON"], "qualifiers": ["family", "business_associate", "personal_relation"], "threshold": null},
     {"id": "org_org", "directed": false, "head": ["ORG"], "tail": ["ORG"], "qualifiers": ["subsidiary_of", "member_of", "founder_of"], "threshold": null},
     {"id": "per_org", "directed": false, "head": ["PERSON"], "tail": ["ORG"], "qualifiers": ["employee_of", "member_of", "founder_of"], "threshold": null}
