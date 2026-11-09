@@ -245,3 +245,23 @@ def test_suppress_overlapping_keeps_best_and_other_categories():
     ents2 = [ent("PERSON", "A", 0), ent("ORG", "X", 10), ent("ORG", "Y", 20)]
     rs2 = typed([rel("employee_of", ep("A", 0), ep("X", 10), 0.9), rel("employee_of", ep("A", 0), ep("Y", 20), 0.8)], ents2)
     assert len(R.suppress_overlapping(R.collapse_pairs(rs2, CATS, "w"))) == 2
+
+
+def test_qualifier_remap_person_place_only_and_score_unchanged():
+    ents = [ent("PERSON", "Jonas", 0), ent("ORG", "Acme", 10), ent("GPE", "Graz", 20)]
+    rs = typed([rel("located_in", ep("Jonas", 0), ep("Graz", 20), 0.7),
+                rel("located_in", ep("Acme", 10), ep("Graz", 20), 0.6)], ents)
+    pairs = R.collapse_pairs(rs, CATS, "w", score_names="qualifiers")
+    by_head = {p["head"]["type"]: p for p in pairs}
+    assert [q["name"] for q in by_head["PERSON"]["qualifiers"]] == ["resident_of"]
+    assert [q["name"] for q in by_head["ORG"]["qualifiers"]] == ["located_in"]
+    assert by_head["PERSON"]["score"] == pytest.approx(0.7)
+    off = [dict(c, qualifier_remap={}) for c in CATS]
+    (p0,) = [p for p in R.collapse_pairs(rs, off, "w") if p["head"]["type"] == "PERSON"]
+    assert [q["name"] for q in p0["qualifiers"]] == ["located_in"]
+
+
+def test_remap_qualifiers_merges_by_max():
+    out = R.remap_qualifiers([("located_in", 0.6), ("resident_of", 0.8)],
+                             {"head_type": {"PERSON": {"located_in": "resident_of"}}}, "PERSON")
+    assert out == [("resident_of", 0.8)]

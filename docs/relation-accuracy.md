@@ -16,7 +16,7 @@ pairs are noise; counts (tp/fp/fn) are given next to every rate.
 | | |
 |---|---|
 | Best pipeline | 2 relation passes (v2.1 grouping) + entity pass; max over the category's qualifier-name scores; type gate; overlap NMS; per-category **temperature** calibration; **one global threshold 0.5** on the calibrated score |
-| Test (45 pairs), CoreML fp32 | P 0.62, R 0.80, F1 0.70 (36/22/9), AUPRC 0.69, ECE 0.17, qualifier top-1 26/36 |
+| Test (45 pairs), CoreML fp32 | P 0.62, R 0.80, F1 0.70 (36/22/9), AUPRC 0.69, ECE 0.17, qualifier top-1 29/36 (26/36 before the qualifier remap) |
 | Raw model, same engine | F1 0.62 (41/47/4 at 0.5), AUPRC 0.61 |
 | Weakest category | `place` (test F1 0.52, AUPRC 0.36) |
 | Per-category thresholds | Did not help: no gain in 5-fold dev CV, worse on test. Not adopted |
@@ -28,13 +28,12 @@ pairs are noise; counts (tp/fp/fn) are given next to every rate.
 ## Headline command
 
 ```sh
-uv run python scripts/compare.py --gold eval/gold.jsonl --split test --preds-dir data/no-raw \
+uv run python scripts/compare.py --gold eval/gold.jsonl --split test --no-raw \
   --pairs-dir data/pairs-all --pairs-only --threshold 0.5 --engine coreml-fp32-cpu
 ```
 
 `data/pairs-all/<engine>.jsonl` holds every scored pair after the final pipeline (calibrated scores, no thresholding), so
-AUPRC and ECE are over the full ranking and `--threshold 0.5` is the production operating point. `--preds-dir data/no-raw`
-(an empty path) keeps compare.py from also scoring the raw prediction files. The pair files are built by:
+AUPRC and ECE are over the full ranking and `--threshold 0.5` is the production operating point. `--no-raw` keeps compare.py from also scoring the raw prediction files under `<preds-dir>/gold`. The pair files are built by:
 
 ```sh
 uv run python eval/experiments/mk_final.py      # dev-only tuning of the p80 thresholds -> eval/experiments/final-*.json
@@ -142,11 +141,30 @@ promise 0.8 precision from thresholds alone.
 - Schema edits made (commit 724dc26; thresholds reverted to null inside 62aaa44): relation `pass` fields, the `relation_passes` list
   (`["affiliation", "social_place"]`; needed for the pass change), `$comment`; `pair_categories[].threshold` stays `null`.
 
+## Experiment 13: `resident_of` (gate C follow-up, dev)
+
+The earlier `resident_of` drop was confounded with the grouping change (01b). Two clean tests, same pipeline as 05e plus temperature, threshold 0.5:
+
+| run | tp/fp/fn | P / R / F1 | macro F1 | AUPRC | ms/win | qualifier top-1 dev / test |
+|---|---|---|---|---|---|---|
+| reference (final config) | 40/15/18 | .727 / .690 / .708 | .708 | .642 | 122 | 30/40 / 26/36 |
+| **13a** `resident_of` ("lives in") as a 3rd single-relation pass, 4 calls | 40/18/18 | .690 / .690 / .690 | .695 | .619 | 233 | 31/40 / not run |
+| **13b** qualifier remap, no model change | 40/15/18 (unchanged) | .727 / .690 / .708 | .708 | .642 | 122 | **31/40** / **29/36** |
+
+- **13a not adopted:** no extra true positive (place still 6 tp; p-de-04 Jonas-Graz and p-de-07 Stefan-Linz stay missed), +3 false positives, lower F1 and AUPRC, and
+  latency +90% (the pass costs more than a call because it also shrinks windows slightly, 157 vs 157 windows but a longer prompt set).
+- **13b adopted:** in `place` pairs whose head type is PERSON, the qualifier `located_in` is relabelled `resident_of` after scoring (pair score and ranking are untouched, so
+  pair F1 is identical by construction). Qualifier top-1 improves 30/40 to 31/40 on dev and 26/36 to 29/36 on test (+3 pairs; small counts).
+  Implemented in `relations.py` (`remap_qualifiers`, `DEFAULT_QUALIFIER_REMAP`, unit tests), schema-driven through an optional
+  `pair_categories[].qualifier_remap`; the default means no schema change is required. Optional explicit schema form:
+  `"qualifier_remap": {"head_type": {"PERSON": {"located_in": "resident_of"}}}` on the `place` category. Rust port: after collapse, for each
+  pair rename the qualifier (merging collisions by max) when the head's snapped type has an entry.
+
 ## Test results (45 pairs; counts tp/fp/fn)
 
 Final pipeline, CoreML fp32 CPU, split=test, pool items included. F1 point = global 0.5 on the calibrated score.
 P>=0.8 point = per-category dev-tuned thresholds. AUPRC and ECE(10) over all scored pairs. Macro F1 .701 (F1 point), .530 (P>=0.8 point).
-Qualifier top-1 on matched pairs: 26/36 = 0.72.
+Qualifier top-1 on matched pairs: 29/36 = 0.81 (with the PERSON-place qualifier remap, experiment 13b).
 
 | category | gold | F1 point (tp/fp/fn, P, R, F1) | P>=0.8 point | AUPRC | ECE |
 |---|---|---|---|---|---|
@@ -164,11 +182,11 @@ Dev to test: per_per fell from F1 .75 to .61 and place from .48 to .52 (up); per
 
 | engine | overall tp/fp/fn | P / R / F1 | AUPRC | ECE | macro F1 | qualifier top-1 | ms/window |
 |---|---|---|---|---|---|---|---|
-| coreml-fp32 CPU | 36/22/9 | .62 / .80 / .70 | .692 | .169 | .701 | 26/36 | 122 |
-| coreml-fp16-w8 CPU | 37/22/8 | .63 / .82 / .71 | .715 | .156 | .715 | 27/37 | 72 |
-| torch fp32 | 36/22/9 | .62 / .80 / .70 | .692 | .169 | .701 | 26/36 | 156 |
-| torch JointIE (2.0.0, undirected) | 42/61/3 | .41 / .93 / .57 | .661 | .278 | .594 | 38/42 | 160 |
-| rust-ort fp32 (no pair scorer) | 38/42/7 | .47 / .84 / .61 | .564 | .172 | .620 | 27/37 | 226 |
+| coreml-fp32 CPU | 36/22/9 | .62 / .80 / .70 | .692 | .169 | .701 | 29/36 | 122 |
+| coreml-fp16-w8 CPU | 37/22/8 | .63 / .82 / .71 | .715 | .156 | .715 | 30/37 | 72 |
+| torch fp32 | 36/22/9 | .62 / .80 / .70 | .692 | .169 | .701 | 29/36 | 156 |
+| torch JointIE (2.0.0, undirected) | 42/61/3 | .41 / .93 / .57 | .661 | .278 | .594 | 37/42 | 160 |
+| rust-ort fp32 (no pair scorer) | 38/42/7 | .47 / .84 / .61 | .564 | .172 | .620 | 30/37 | 226 |
 
 CoreML fp32 and torch are identical (parity). fp16-w8 differs by 1 pair in either direction: fp16-w8 is the production precision
 and is not worse here.
@@ -218,7 +236,7 @@ and `uv.lock` untouched). Runner: `eval/experiments/run_jointie_rel.py` (adds `-
 **Verdict:** 2.1.0 changes nothing material (the symmetric bug persists; `undirected` is still required). JointIE's ranking is not better than
 independent decoding with the same type gate (AUPRC .586 vs .574 on dev, .661 vs .692 on test), and score separation is the same
 (TP/FP medians .82/.33 vs .76/.27, a gap of 0.49 in both). It does give higher recall (place 10 of 16 tp vs 5 to 6) at much lower precision
-(place fp 19 to 20 vs 3), and a clearly better **qualifier** accuracy (test 38/42 = .90 vs 26/36 = .72), because its typed relation signatures
+(place fp 19 to 20 vs 3), and a clearly better **qualifier** accuracy (test 37/42 = .88 vs 29/36 = .81 after the remap; 26/36 = .72 before it), because its typed relation signatures
 choose the relation name jointly with the endpoint types. **Not worth porting a JointIE-style decoder to Rust for the pair question.** If
 the qualifier matters, a cheap alternative is to port only the typed qualifier choice (restrict the argmax to names allowed by the endpoint types, which
 `pair_categories[].qualifiers` already does).

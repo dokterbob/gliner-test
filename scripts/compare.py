@@ -613,6 +613,8 @@ def main():
                     help="pair endpoint rule: `text` = case-folded text equality; `overlap` = text equality OR char overlap")
     ap.add_argument("--pairs-only", action="store_true",
                     help="print only the pair-level relation report (fast; skips corpus agreement and legacy gold tables)")
+    ap.add_argument("--no-raw", action="store_true",
+                    help="do not score raw prediction files under <preds-dir>/gold (pair files only)")
     ap.add_argument("--engine", action="append", default=None,
                     help="restrict pair report to these engine names (repeatable)")
     args = ap.parse_args()
@@ -634,7 +636,7 @@ def main():
     if not args.include_pool:
         for rec in gold.values():
             rec["relations"] = [r for r in rec.get("relations", []) if r.get("source") != "pool"]
-    gold_engines = discover_gold_engines(args.preds_dir)
+    gold_engines = {} if args.no_raw else discover_gold_engines(args.preds_dir)
     pairs_engines = load_pairs_dir(args.pairs_dir)
     corpus_engines = {} if args.pairs_only else discover_engines(args.preds_dir)
     pair_cats, global_thr = load_pair_schema(args.schema)

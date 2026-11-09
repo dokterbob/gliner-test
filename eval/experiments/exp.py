@@ -110,6 +110,8 @@ def pairs_for(cfg, raw_path, categories, apply_threshold=False):
     mode = post.get("collapse", "max")
     sn = post.get("score_names", "all")
     out = {}
+    if post.get("no_remap"):
+        categories = [dict(c, qualifier_remap={}) for c in categories]
     cal = None
     if post.get("calibration"):
         cal = json.loads((ROOT / post["calibration"]).read_text())

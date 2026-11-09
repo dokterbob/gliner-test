@@ -1,0 +1,16 @@
+{
+ "id": "13b-remap-on",
+ "desc": "final config + qualifier remap (PERSON place: located_in -> resident_of)",
+ "schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw_file": "data/preds/gold/coreml-fp32-cpu.jsonl",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/coreml-fp32-cpu.json",
+  "cat_thresholds": {}
+ }
+}

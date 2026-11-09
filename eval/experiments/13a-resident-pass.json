@@ -1,0 +1,15 @@
+{
+ "id": "13a-resident-pass",
+ "desc": "final grouping + resident_of as 3rd pass (4 calls), 05e pipeline + temperature (dev fit)",
+ "schema": "eval/experiments/schemas/v21-resident.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "calibration": "eval/calibration/13a-temperature.json"
+ }
+}

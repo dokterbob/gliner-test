@@ -54,6 +54,26 @@ from pathlib import Path
 # --------------------------------------------------------------------------
 
 
+# Qualifier relabelling applied after scoring (never changes pair scores): {category: {"head_type": {TYPE: {from: to}}}}.
+# A schema `pair_categories[].qualifier_remap` of the same shape overrides it; `{}` disables it. The default exists because
+# the model's `located_in` prompt also fires for "X lives in Y" and resident_of is not sent to the model in the 2-pass schema.
+DEFAULT_QUALIFIER_REMAP = {"place": {"head_type": {"PERSON": {"located_in": "resident_of"}}}}
+
+
+def remap_qualifiers(quals, remap, head_type):
+    """quals: [(name, score)]; returns [(name, score)] with names relabelled for `head_type`
+    (merging collisions by max score), sorted by score descending then name."""
+    m = (remap or {}).get("head_type", {}).get(head_type)
+    if not m:
+        return quals
+    merged = {}
+    for n, sc in quals:
+        n = m.get(n, n)
+        if sc > merged.get(n, -1.0):
+            merged[n] = sc
+    return sorted(merged.items(), key=lambda ns: (-ns[1], ns[0]))
+
+
 def load_schema(path):
     """-> {"threshold": float, "categories": [{"id","directed","head":[..],"tail":[..],
     "qualifiers":[..],"threshold": float|None}]} in schema order."""
@@ -69,6 +89,7 @@ def load_schema(path):
                 "tail": list(c["tail"]),
                 "qualifiers": list(c.get("qualifiers", [])),
                 "detectors": list(c.get("detectors", [])),
+                "qualifier_remap": c.get("qualifier_remap", DEFAULT_QUALIFIER_REMAP.get(c["id"], {})),
                 "threshold": c.get("threshold"),
             }
         )
@@ -233,6 +254,7 @@ def collapse_pairs(relations, categories, window_id=None, mode="max", score_name
             used = [g["names"][n] for n in sorted(g["names"])]
         if not used:
             continue
+        quals = remap_qualifiers(quals, cat.get("qualifier_remap"), cz["head"].get("type"))
         pair = {
             "window_id": window_id,
             "category": cz["category"],
