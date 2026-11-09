@@ -532,6 +532,10 @@ def cmd_show(args) -> None:
 
 # ---------------------------------------------------------------- pool candidates
 
+def hh_label(h, t, swapped) -> str:
+    return (t if swapped else h)["label"]
+
+
 def cmd_pool_cands(args) -> None:
     """Pool candidates: predicted pairs (score>=cutoff) not in adjudicated gold, typed by span overlap."""
     cats = load_categories()
@@ -570,6 +574,10 @@ def cmd_pool_cands(args) -> None:
                 if not ok:
                     continue
                 if r["name"] not in c["qualifiers"]:
+                    continue
+                if r["name"] == "resident_of" and hh_label(h, t, swapped) != "PERSON":
+                    continue
+                if r["name"] == "located_in" and hh_label(h, t, swapped) == "PERSON":
                     continue
                 hh, tt = (t, h) if swapped else (h, t)
                 k = pair_key({"category": cid, "head": hh, "tail": tt, "qualifiers": []})

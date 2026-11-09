@@ -1,0 +1,20 @@
+{
+ "gold-0009": {"accept": ["P:per_org:111-120:124-133"], "note": "cache maintained by Jane Park at Anthropic: affiliation entailed (guidelines ex. 5)"},
+ "gold-0010": {"accept": ["P:place:25-39:56-64"], "note": "UN headquarters in New York: org located_in; person has no pair (event location)"},
+ "gold-0025": {"accept": ["E:83-92:TIME"], "note": "include unit word, like 15.00 uur"},
+ "gold-0030": {"accept": ["E:83-92:TIME"], "note": "include unit word"},
+ "gold-0042": {"accept": ["E:42-70:FAC"], "note": "longest span: border crossing is a facility"},
+ "gold-0043": {"accept": ["E:25-32:DATE"], "note": "frequency adverb is DATE in OntoNotes"},
+ "gold-0064": {"accept": ["E:38-57:ORG", "P:org_org:0-4:38-57"], "note": "keep the German genitive inflection inside the token (surface word)"},
+ "gold-0078": {"accept": ["E:34-39:DATE"], "note": "duration is DATE"},
+ "gold-0080": {"accept": ["E:53-64:DATE"], "note": "duration is DATE"},
+ "gold-p-en-03": {"accept": ["E:18-24:PERSON", "P:per_org:43-56:122-136"], "note": "sits on the board of = member_of"},
+ "gold-p-en-04": {"accept": ["E:160-168:ORG", "P:place:160-168:181-188", "P:place:17-40:111-118"], "note": "'Their HQ is still in Ostrava' (anaphor, entailed); 'Meridian's office in Hamburg'"},
+ "gold-p-en-07": {"accept": ["E:73-82:GPE"], "note": "district: GPE; no pair with Berlin (not stated)"},
+ "gold-p-nl-04": {"accept": ["P:place:21-34:68-81"], "note": "postal address counts as location (guidelines 3.3)"},
+ "gold-p-nl-08": {"accept": [], "note": "Taalwerk Congres is an event name, not an ORG: rejected"},
+ "gold-p-de-01": {"accept": ["E:107-117:FAC", "P:place:107-117:121-125"], "note": "cafe is in Wien; facility containment, not event location of persons"},
+ "gold-p-de-05": {"accept": ["E:145-156:ORG", "P:per_org:119-131:145-156"], "note": "name without the generic descriptor 'Start-up'"},
+ "gold-p-de-07": {"accept": ["P:per_per:110-118:282-288", "P:per_per:18-24:282-288"], "note": "Onkel/Tante + signature name; consistent with Schwester Judith (both annotators agreed)"},
+ "gold-p-fr-10": {"accept": ["E:132-156:ORG", "P:per_org:97-111:132-156"], "note": "library is an ORG (longest span, rule 1.1); Inès->mediatheque left out (ambiguous)"}
+}
