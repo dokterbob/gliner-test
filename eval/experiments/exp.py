@@ -267,6 +267,66 @@ def tune_thresholds(cfg, split="dev", precision_target=0.8):
     return f1_thr, p_thr
 
 
+def calib_samples(cfg, split="dev"):
+    """{category: [(score, 0/1)]} over every window-level pair of `split`, labelled against gold; plus per-window lists."""
+    eid = cfg.get("raw") or cfg["id"]
+    sch = R.load_schema(ROOT / (cfg.get("post_schema") or cfg["schema"]))
+    if not sch["categories"]:
+        sch = R.load_schema(ROOT / "schema/ontonotes.json")
+    c2 = json.loads(json.dumps(cfg))
+    c2["post"] = {k: v for k, v in cfg["post"].items() if k != "calibration"}
+    pairs = pairs_for(c2, exp_dir(eid) / "raw.jsonl", sch["categories"])
+    gold = {g["window_id"]: g for g in jl(ROOT / "eval/gold.jsonl") if split == "all" or g.get("split") == split}
+    per_win = []
+    for wid, ps in pairs.items():
+        g = gold.get(wid)
+        if g is None:
+            continue
+        per_win.append([(p["category"], p["score"], lab) for p, lab in zip(ps, R.label_pairs(ps, g))])
+    return per_win
+
+
+def _bucket(per_win):
+    out = {}
+    for w in per_win:
+        for c, s, l in w:
+            out.setdefault(c, []).append((s, l))
+    return out
+
+
+def cmd_calibrate(args):
+    cfg = load_cfg(args.config)
+    per_win = calib_samples(cfg, "dev")
+    name = Path(args.config).stem
+    outd = ROOT / "eval/calibration"
+    outd.mkdir(parents=True, exist_ok=True)
+    iso = R.fit(_bucket(per_win), engine=cfg["engine"], min_samples=args.min_samples)
+    tmp = R.fit_temperature_table(_bucket(per_win), engine=cfg["engine"], min_samples=args.min_samples)
+    (outd / f"{args.tag}-isotonic.json").write_text(json.dumps(iso, indent=1))
+    (outd / f"{args.tag}-temperature.json").write_text(json.dumps(tmp, indent=1))
+    print("isotonic n:", {k: v["n"] for k, v in iso["categories"].items()})
+    print("temperature:", {"global": round(tmp["global"]["T"], 3), **{k: round(v["T"], 3) for k, v in tmp["categories"].items()}})
+    # 5-fold (by window) cross-fitted ECE on dev: honest comparison of the two methods without touching test
+    folds = [per_win[i::5] for i in range(5)]
+    res = {"raw": ([], []), "isotonic": ([], []), "temperature": ([], [])}
+    for k in range(5):
+        tr = _bucket([w for j, f in enumerate(folds) if j != k for w in f])
+        iso_k = R.fit(tr, min_samples=args.min_samples)
+        tmp_k = R.fit_temperature_table(tr, min_samples=args.min_samples)
+        for w in folds[k]:
+            for c, sc, l in w:
+                pr = {"category": c, "score": sc}
+                res["raw"][0].append(sc)
+                res["raw"][1].append(l)
+                res["isotonic"][0].append(R.apply([pr], iso_k)[0]["score"])
+                res["isotonic"][1].append(l)
+                res["temperature"][0].append(R.apply_temperature([pr], tmp_k)[0]["score"])
+                res["temperature"][1].append(l)
+    for m, (sc, lab) in res.items():
+        nll = -sum(math.log(max(min(s, 1 - 1e-6), 1e-6)) if l else math.log(max(1 - min(s, 1 - 1e-6), 1e-6)) for s, l in zip(sc, lab)) / len(sc)
+        print(f"5-fold dev  {m:<12} ECE(10)={C.ece(sc, lab):.3f}  logloss={nll:.3f}  n={len(sc)}")
+
+
 def cmd_tune(args):
     cfg = load_cfg(args.config)
     f1_thr, p_thr = tune_thresholds(cfg)
@@ -296,6 +356,11 @@ def main():
     e.add_argument("--exclude-pool", action="store_true")
     e.add_argument("--no-record", action="store_true")
     e.set_defaults(fn=cmd_eval)
+    c = sub.add_parser("calibrate", help="fit isotonic + temperature on dev; print 5-fold dev ECE")
+    c.add_argument("config")
+    c.add_argument("--tag", required=True)
+    c.add_argument("--min-samples", type=int, default=8)
+    c.set_defaults(fn=cmd_calibrate)
     t = sub.add_parser("tune", help="print dev-tuned per-category thresholds for a config")
     t.add_argument("config")
     t.set_defaults(fn=cmd_tune)

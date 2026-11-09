@@ -1,0 +1,22 @@
+{
+ "id": "07-isotonic-f1thr",
+ "desc": "isotonic calibration fitted on dev (min 8 samples/cat), then per-category thresholds re-tuned on the calibrated scale (in-sample)",
+ "schema": "schema/ontonotes-v2.1.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw": "01a-v21-baseline",
+ "flags": {},
+ "post": {
+  "collapse": "max",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "cat_thresholds": {
+   "place": 0.25,
+   "per_per": 0.55,
+   "org_org": 0.2,
+   "per_org": 0.45
+  },
+  "calibration": "eval/calibration/coreml-fp32-v21-max-isotonic.json"
+ }
+}

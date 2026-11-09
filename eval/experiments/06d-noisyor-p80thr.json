@@ -1,0 +1,21 @@
+{
+ "id": "06d-noisyor-p80thr",
+ "desc": "noisy-or; per-category lowest thr with dev P>=0.8 (in-sample)",
+ "schema": "schema/ontonotes-v2.1.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw": "01a-v21-baseline",
+ "flags": {},
+ "post": {
+  "collapse": "noisy-or",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "cat_thresholds": {
+   "place": 0.95,
+   "per_per": 0.6,
+   "org_org": 0.3,
+   "per_org": 0.85
+  }
+ }
+}

@@ -1,0 +1,21 @@
+{
+ "id": "06c-noisyor-f1thr",
+ "desc": "noisy-or; per-category thr maximising dev F1 (in-sample)",
+ "schema": "schema/ontonotes-v2.1.json",
+ "post_schema": "schema/ontonotes.json",
+ "engine": "coreml-fp32",
+ "raw": "01a-v21-baseline",
+ "flags": {},
+ "post": {
+  "collapse": "noisy-or",
+  "score_names": "qualifiers",
+  "nms": true,
+  "threshold": 0.5,
+  "cat_thresholds": {
+   "place": 0.6,
+   "per_per": 0.75,
+   "org_org": 0.35,
+   "per_org": 0.7
+  }
+ }
+}
