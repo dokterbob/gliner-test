@@ -6,6 +6,8 @@ authors = [
     { name = "dokterbob-agent[bot]", email = "4322994+dokterbob-agent[bot]@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 dependencies = [
     "coremltools==9.0",
     "gliner2[local]==2.0.0",
