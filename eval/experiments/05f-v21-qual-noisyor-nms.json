@@ -1,0 +1,3 @@
+{"id": "05f-v21-qualifiers-noisyor-nms", "desc": "noisy-or over qualifier names + NMS",
+ "schema": "schema/ontonotes-v2.1.json", "post_schema": "schema/ontonotes.json", "engine": "coreml-fp32", "raw": "01a-v21-baseline",
+ "flags": {}, "post": {"collapse": "noisy-or", "score_names": "qualifiers", "nms": true, "threshold": 0.5}}

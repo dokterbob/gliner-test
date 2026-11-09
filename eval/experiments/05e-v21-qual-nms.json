@@ -1,0 +1,3 @@
+{"id": "05e-v21-qualifiers-nms", "desc": "05b + overlap NMS of nested-span duplicate pairs",
+ "schema": "schema/ontonotes-v2.1.json", "post_schema": "schema/ontonotes.json", "engine": "coreml-fp32", "raw": "01a-v21-baseline",
+ "flags": {}, "post": {"collapse": "max", "score_names": "qualifiers", "nms": true, "threshold": 0.5}}

@@ -18,3 +18,5 @@ Cell format `tp/fp/fn`. All dev unless noted. overall = untyped, unordered pairs
 | 05b-v21-qualifiers-only | dev | y | 0.5 | 0.678 | 0.69 | 0.684 | 0.69 | 0.577 | 0.178 | 0.6: 0.71 | 0.48 | 0.72 | 0.833 | 0.727 | 40/19/18 | 30/40 | 120.5 | baseline raw (01a), max over the category's own qualifier names only |
 | 05c-v21-qualifiers-noisyor | dev | y | 0.5 | 0.635 | 0.69 | 0.661 | 0.674 | 0.602 | 0.178 | 0.7: 0.679 | 0.48 | 0.692 | 0.833 | 0.69 | 40/23/18 | 30/40 | 120.5 | baseline raw (01a), noisy-or over the category's own qualifier names only |
 | 05d-v22-noisyor | dev | y | 0.5 | 0.519 | 0.69 | 0.593 | 0.582 | 0.581 | 0.273 | 0.75: 0.637 | 0.286 | 0.769 | 0.571 | 0.7 | 40/37/18 | 30/40 | 159.8 | v2.2 raw (01b), noisy-or |
+| 05e-v21-qualifiers-nms | dev | y | 0.5 | 0.727 | 0.69 | 0.708 | 0.708 | 0.58 | 0.163 | 0.6: 0.71 | 0.48 | 0.75 | 0.833 | 0.769 | 40/15/18 | 30/40 | 120.5 | 05b + overlap NMS of nested-span duplicate pairs |
+| 05f-v21-qualifiers-noisyor-nms | dev | y | 0.5 | 0.678 | 0.69 | 0.684 | 0.69 | 0.606 | 0.162 | 0.5: 0.684 | 0.48 | 0.72 | 0.833 | 0.727 | 40/19/18 | 30/40 | 120.5 | noisy-or over qualifier names + NMS |

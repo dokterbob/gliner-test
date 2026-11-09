@@ -229,3 +229,19 @@ def test_temperature_table_apply_and_dispatch():
     out = R.apply_calibration(pairs, table)
     assert out[0]["raw_score"] == 0.95 and out[0]["score"] < 0.95
     assert out[1]["score"] == pytest.approx(R.apply_temperature_score(0.9, table["global"]["T"]))
+
+
+def test_suppress_overlapping_keeps_best_and_other_categories():
+    ents = [ent("PERSON", "Robert Habeck", 0), ent("ORG", "Gruene-Fraktion im Bundestag", 20), ent("ORG", "Gruene-Fraktion", 20)]
+    rs = typed([
+        rel("member_of", ep("Robert Habeck", 0), ep("Gruene-Fraktion im Bundestag", 20), 0.9),
+        rel("member_of", ep("Robert Habeck", 0), ep("Gruene-Fraktion", 20), 0.6),
+    ], ents)
+    pairs = R.collapse_pairs(rs, CATS, "w")
+    assert len(pairs) == 2
+    (kept,) = R.suppress_overlapping(pairs)
+    assert kept["score"] == pytest.approx(0.9)
+    # disjoint tails are not duplicates
+    ents2 = [ent("PERSON", "A", 0), ent("ORG", "X", 10), ent("ORG", "Y", 20)]
+    rs2 = typed([rel("employee_of", ep("A", 0), ep("X", 10), 0.9), rel("employee_of", ep("A", 0), ep("Y", 20), 0.8)], ents2)
+    assert len(R.suppress_overlapping(R.collapse_pairs(rs2, CATS, "w"))) == 2

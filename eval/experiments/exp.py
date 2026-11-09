@@ -108,7 +108,7 @@ def pairs_for(cfg, raw_path, categories, apply_threshold=False):
     if post.get("calibration"):
         cal = json.loads((ROOT / post["calibration"]).read_text())
     for rec in jl(raw_path):
-        pairs = R.predictions_to_pairs(rec, categories, mode, sn)
+        pairs = R.predictions_to_pairs(rec, categories, mode, sn, bool(post.get("nms")))
         if cal is not None:
             pairs = apply_cal(pairs, cal)
         out[rec["window_id"]] = pairs
@@ -240,6 +240,40 @@ def cmd_eval(args):
             write_md()
 
 
+def tune_thresholds(cfg, split="dev", precision_target=0.8):
+    """Per-category thresholds on `split` (dev!): (a) maximise F1 -- the middle of the plateau of equally good
+    0.05-grid thresholds; (b) lowest threshold with precision >= target (else the highest grid point)."""
+    eid = cfg.get("raw") or cfg["id"]
+    sch = R.load_schema(ROOT / (cfg.get("post_schema") or cfg["schema"]))
+    if not sch["categories"]:
+        sch = R.load_schema(ROOT / "schema/ontonotes.json")
+    pairs = pairs_for(cfg, exp_dir(eid) / "raw.jsonl", sch["categories"])
+    gold = C.load_gold(ROOT / "eval/gold.jsonl", split)
+    pcats, _ = C.load_pair_schema(ROOT / "schema/ontonotes.json")
+    ev = C.PairEval({w: {"entities": [], "pairs": ps} for w, ps in pairs.items()}, gold, pcats, "overlap", True, True)
+    grid = [i / 20 for i in range(1, 20)]
+    f1_thr, p_thr = {}, {}
+    for c in ev.views[1:]:
+        scored = []
+        for t in grid:
+            tp, fp, fn = ev.counts(c, t)
+            p, r, f1 = prf(tp, fp, fn)
+            scored.append((t, f1, p, tp + fp))
+        best = max(x[1] for x in scored)
+        plateau = [x[0] for x in scored if x[1] >= best - 1e-9]
+        f1_thr[c] = round(plateau[len(plateau) // 2], 2)
+        ok = [x[0] for x in scored if x[2] >= precision_target and x[3] > 0]
+        p_thr[c] = round(ok[0], 2) if ok else 0.95
+    return f1_thr, p_thr
+
+
+def cmd_tune(args):
+    cfg = load_cfg(args.config)
+    f1_thr, p_thr = tune_thresholds(cfg)
+    print("max-F1 thresholds:", json.dumps(f1_thr))
+    print("P>=0.8 thresholds:", json.dumps(p_thr))
+
+
 def cmd_rebuild(args):
     (ROOT / "eval/experiments/results.jsonl").write_text("")
     for p in sorted(Path(ROOT / "eval/experiments").glob("[0-9][0-9]*.json")):
@@ -262,6 +296,9 @@ def main():
     e.add_argument("--exclude-pool", action="store_true")
     e.add_argument("--no-record", action="store_true")
     e.set_defaults(fn=cmd_eval)
+    t = sub.add_parser("tune", help="print dev-tuned per-category thresholds for a config")
+    t.add_argument("config")
+    t.set_defaults(fn=cmd_tune)
     b = sub.add_parser("rebuild", help="re-evaluate every NN-*.json config (dev) and rewrite results.jsonl/md")
     b.add_argument("--split", default="dev", choices=["dev"])
     b.set_defaults(fn=cmd_rebuild)

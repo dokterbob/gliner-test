@@ -247,6 +247,35 @@ def collapse_pairs(relations, categories, window_id=None, mode="max", score_name
     return pairs
 
 
+def suppress_overlapping(pairs):
+    """Greedy non-maximum suppression over window-level pairs: visit pairs by
+    descending score (ties: input order) and drop a pair when an already kept
+    pair of the same category has overlapping head spans AND overlapping tail
+    spans (undirected categories also compare head/tail crosswise). This removes
+    the duplicates that nested entity spans produce ("Grünen-Fraktion" vs
+    "Grünen-Fraktion im Bundestag"). Pairs must belong to one window."""
+    order = sorted(range(len(pairs)), key=lambda i: (-pairs[i]["score"], i))
+    kept = []
+    for i in order:
+        p = pairs[i]
+        dup = False
+        for k in kept:
+            if k["category"] != p["category"]:
+                continue
+            fwd = (_overlap(p["head"]["start"], p["head"]["end"], k["head"]["start"], k["head"]["end"]) > 0
+                   and _overlap(p["tail"]["start"], p["tail"]["end"], k["tail"]["start"], k["tail"]["end"]) > 0)
+            rev = (not p["directed"]
+                   and _overlap(p["head"]["start"], p["head"]["end"], k["tail"]["start"], k["tail"]["end"]) > 0
+                   and _overlap(p["tail"]["start"], p["tail"]["end"], k["head"]["start"], k["head"]["end"]) > 0)
+            if fwd or rev:
+                dup = True
+                break
+        if not dup:
+            kept.append(p)
+    kept_ids = {id(p) for p in kept}
+    return [p for p in pairs if id(p) in kept_ids]
+
+
 # --------------------------------------------------------------------------
 # 4. apply_thresholds
 # --------------------------------------------------------------------------
@@ -541,9 +570,10 @@ def aggregate_document(pairs, windows_by_id, mode="max"):
 # --------------------------------------------------------------------------
 
 
-def predictions_to_pairs(rec, categories, mode="max", score_names="all"):
+def predictions_to_pairs(rec, categories, mode="max", score_names="all", nms=False):
     typed = snap_and_type(rec.get("relations", []), rec.get("entities", []))
-    return collapse_pairs(typed, categories, rec["window_id"], mode, score_names)
+    pairs = collapse_pairs(typed, categories, rec["window_id"], mode, score_names)
+    return suppress_overlapping(pairs) if nms else pairs
 
 
 def _read_jsonl(path):
@@ -600,6 +630,8 @@ def main(argv=None):
     ap.add_argument("--collapse", choices=["max", "noisy-or"], default="max")
     ap.add_argument("--score-names", choices=["all", "qualifiers", "detectors"], default="all",
                     help="names contributing to the pair score (default all; qualifiers = category's own names)")
+    ap.add_argument("--nms", action="store_true",
+                    help="suppress lower-scoring pairs whose endpoints overlap a kept pair of the same category")
     ap.add_argument("--global-threshold", type=float, default=None,
                     help="fallback threshold for categories whose schema threshold is null (default: schema threshold)")
     ap.add_argument("--cat-threshold", action="append", metavar="CAT=VALUE",
@@ -621,7 +653,7 @@ def main(argv=None):
     gthr = schema["threshold"] if args.global_threshold is None else args.global_threshold
     overrides = _parse_overrides(args.cat_threshold)
     recs = _read_jsonl(args.preds)
-    by_window = [(r["window_id"], predictions_to_pairs(r, cats, args.collapse, args.score_names)) for r in recs]
+    by_window = [(r["window_id"], predictions_to_pairs(r, cats, args.collapse, args.score_names, args.nms)) for r in recs]
 
     if args.fit_calibration:
         if args.calibration_out is None:
