@@ -1,12 +1,21 @@
-"""Download the GLiNER2.5 multi CoreML export into a materialized directory.
+"""Fetch the GLiNER2.5 multi CoreML export via HF's normal cache, then
+materialize (hard-link) the files we need into a real, writable, gitignored
+directory that CoreML can compile from.
 
-A materialized (non-symlinked) directory is required: the default Hugging Face
-hub cache stores large files as symlinks into a shared blob store, and CoreML's
-compiler refuses to open a symlinked .mlpackage. We therefore pass
-`local_dir=...` to `snapshot_download`, which copies real files.
+Two separate problems, two fixes:
 
-We only fetch what `extraction_runtime.py` can actually load for entity +
-relation extraction with `Schema().entities(...).relations(...)`:
+1. ``snapshot_download`` with no ``local_dir`` uses the default HF cache
+   (``~/.cache/huggingface``, on the big data volume, not duplicated across
+   revisions) and stores large files as symlinks into a content-addressed
+   blob store -- cheap, normal HF behavior.
+2. CoreML's compiler refuses a symlinked weights file ("weight.bin doesn't
+   exist"), so we hard-link (falling back to a copy only across filesystems)
+   the real blob files into ``.cache/coreml/<revision>/`` via
+   ``gliner_test.compiled_models.materialize``. This costs no extra disk in
+   the common case (a hard link, not a copy) and gives CoreML real files.
+
+We only fetch what ``extraction_runtime.py`` can actually load for entity +
+relation extraction with ``Schema().entities(...)`` / ``Schema().relations(...)``:
   - runtime source files (extraction_runtime.py, extraction_pool.py,
     preprocessing.py, convert_extraction_names.py)
   - config.json / encoder_config/config.json / tokenizer/*
@@ -14,15 +23,14 @@ relation extraction with `Schema().entities(...).relations(...)`:
     record_assignment + record_anchorless mlpackages, for fp32 and fp16,
     plus the two W8-embedding feature variants used by the adaptive runtime.
 
-We deliberately skip the classification_*, explicit... (wait, explicit IS
-needed, see below) packages:
-  - classification_*.mlpackage: unused (no classification task in our schema)
-  - conversion/export/verify/*.py, tests/, reports/: conversion-time tooling,
-    not needed to run the exported model
+We skip classification_*.mlpackage (unused: no classification task in our
+schema) and conversion/export/verify/test tooling (not needed to run the
+exported model).
 
-Note: `CoreMLBoundaryExtractor.__init__` unconditionally loads the explicit,
-relation, record_assignment and record_anchorless packages even though our
-schema only uses entities()+relations(), so those are NOT skippable.
+Note: ``CoreMLBoundaryExtractor.__init__`` unconditionally loads the
+explicit, relation, record_assignment and record_anchorless packages even
+though our schema only uses entities()+relations(), so those are NOT
+skippable.
 """
 
 import argparse
@@ -30,7 +38,10 @@ from pathlib import Path
 
 from huggingface_hub import snapshot_download
 
+from gliner_test.compiled_models import materialize
+
 REPO_ID = "FluidInference/gliner2-5-multi-coreml"
+REVISION = "d35165dfcf7aac0df1d588c3eb9171249b9515cd"
 
 NEEDED_PACKAGES = [
     "gliner2_multi_extraction_features_fp32_L128_W64_Q8",
@@ -53,7 +64,7 @@ NEEDED_FILES = [
     "LICENSE",
     "config.json",
     "encoder_config/config.json",
-    "tokenizer/*",
+    "tokenizer",  # directory, walked recursively by materialize()
     "extraction_runtime.py",
     "extraction_pool.py",
     "preprocessing.py",
@@ -63,17 +74,19 @@ NEEDED_FILES = [
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--local-dir", type=Path, default=Path("models/gliner2-multi-coreml"))
+    ap.add_argument("--revision", default=REVISION)
     args = ap.parse_args()
 
-    allow_patterns = list(NEEDED_FILES) + [f"{pkg}.mlpackage/**" for pkg in NEEDED_PACKAGES]
-
-    path = snapshot_download(
-        repo_id=REPO_ID,
-        local_dir=str(args.local_dir),
-        allow_patterns=allow_patterns,
+    file_patterns = [f"{f}/**" if f == "tokenizer" else f for f in NEEDED_FILES]
+    allow_patterns = file_patterns + [f"{pkg}.mlpackage/**" for pkg in NEEDED_PACKAGES]
+    snapshot_dir = Path(
+        snapshot_download(repo_id=REPO_ID, revision=args.revision, allow_patterns=allow_patterns)
     )
-    print(f"Downloaded to {path}")
+    print(f"HF snapshot (symlinked cache): {snapshot_dir}")
+
+    relpaths = list(NEEDED_FILES) + [f"{pkg}.mlpackage" for pkg in NEEDED_PACKAGES]
+    dest_root = materialize(snapshot_dir, args.revision, relpaths)
+    print(f"Materialized (hard-linked) real files to: {dest_root}")
 
 
 if __name__ == "__main__":

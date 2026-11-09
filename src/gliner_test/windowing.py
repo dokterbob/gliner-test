@@ -133,9 +133,19 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--corpus", type=Path, default=Path("data/corpus.jsonl"))
     ap.add_argument("--schema", type=Path, default=Path("schema/ontonotes.json"))
-    ap.add_argument("--model-dir", type=Path, default=Path("models/gliner2-multi-coreml"))
+    ap.add_argument("--model-dir", type=Path, default=None, help="defaults to .cache/coreml/<revision>")
     ap.add_argument("--out", type=Path, default=Path("data/windows.jsonl"))
     args = ap.parse_args()
+
+    if args.model_dir is None:
+        import sys as _sys
+
+        _sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
+        from download_models import REVISION
+
+        from gliner_test.compiled_models import CACHE_ROOT
+
+        args.model_dir = CACHE_ROOT / REVISION
 
     processor, collator, Schema = load_runtime_pieces(args.model_dir)
     schema_cfg = json.loads(args.schema.read_text())
