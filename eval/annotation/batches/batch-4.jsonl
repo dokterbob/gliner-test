@@ -1,0 +1,25 @@
+{"id": "gold-p-nl-05", "text": "Code review PR 214: de functie compute_pair_scores() in src/relations/pairs.py gebruikt nog de oude config-sleutel pair_category, terwijl schema v2.2 pair_categories verwacht. Graag de fallback verwijderen en de versie in pyproject.toml op 2.2.1 zetten."}
+{"id": "gold-0076", "text": "Timothée Chalamet and Zendaya are close friends who attended the premiere together."}
+{"id": "gold-p-nl-02", "text": "Vergadering dinsdag 14 april 2026 om 10:30 in Rotterdam: Sanne de Vries en Ahmed El Idrissi bespraken de offerte voor Veldmann Logistiek. Daarna bleef Ahmed nog even hangen bij het koffieapparaat met de stagiair."}
+{"id": "gold-p-nl-01", "text": "Ik heb in config/settings.yaml de sleutel ner_threshold verlaagd naar 0.35 en de functie load_gliner_model() in src/models/loader.py aangepast. Versie gliner25-rs staat nu op 580c57b. Reviewer Joost Hendriks vroeg om een test in tests/test_loader.py voor de fallback naar CPU."}
+{"id": "gold-0006", "text": "The Golden Gate Bridge connects San Francisco to Marin County across the bay."}
+{"id": "gold-p-en-02", "text": "Sync at the Rotterdam office, Wednesday 14 October 2026, 10:30. Attendees: Priya Raman, Tomasz Wiecek, Lena Hartmann. Priya presented the Q4 forecast. Tomasz asked about the vendor invoice. Lena will send the revised deck by Friday."}
+{"id": "gold-0042", "text": "The Shia and Sunni delegations met at the Jordan River border crossing at 6am sharp."}
+{"id": "gold-p-de-06", "text": "Die Nordlicht Logistik GmbH ist eine Tochtergesellschaft der Brenner Holding AG mit Sitz in Innsbruck. Der Konzernabschluss 2025 wird am 28.02.2026 vom Vorstand freigegeben. Geschäftsführer der Nordlicht Logistik GmbH ist Martin Gruber, der seit 2021 auch Mitglied des Aufsichtsrats der Holding ist."}
+{"id": "gold-0009", "text": "The ingest crate retries failed fetches at 2026-01-14T08:00:00Z before falling back to the cache maintained by Jane Park at Anthropic."}
+{"id": "gold-p-de-10", "text": "Commit-Beschreibung: fix(loader): `schema_version` aus `schema.json` lesen, bevor `load_schema()` aufgerufen wird. Der Submodul-Pointer `vendor/GLiNER2` steht jetzt auf `v2.0.0`. Der Test `test_resident_of_promotion` läuft mit Python 3.12 durch. Details siehe Issue-Notiz vom 07.11.2026 um 09:40 Uhr."}
+{"id": "gold-p-en-09", "text": "fix(ingest): handle empty Parquet footers in reader.py. Reader now skips files where footer length is zero and logs a warning with the object key. Bumped pyarrow to 16.1.0 in requirements.lock. Reported by Anouk Verhoeven during the Brussels data sprint."}
+{"id": "gold-0067", "text": "Malia Obama is the daughter of Barack Obama."}
+{"id": "gold-0058", "text": "Robert Habeck ist Mitglied der Grünen-Fraktion im Bundestag."}
+{"id": "gold-0050", "text": "The corpus exporter reads from stores named localdb and writes chunks tagged with block_kind text or table."}
+{"id": "gold-0011", "text": "Catholic bishops gathered at St. Peter's Basilica in Vatican City on Easter Sunday."}
+{"id": "gold-p-de-09", "text": "Review-Kommentar zu PR #142: In `src/ner/postprocess.py` ruft `merge_spans()` die Hilfsfunktion `_overlap()` auf, die bei leeren Listen `None` zurückgibt. Bitte in `tests/test_postprocess.py` einen Testfall für `threshold=0.0` ergänzen. Version `2.2.0` im Changelog nicht vergessen."}
+{"id": "gold-p-nl-10", "text": "README: start de service met python -m gliner_app.serve --port 8080 en zet ONNX-modus aan via config key runtime.backend op coreml. Testen draait met pytest tests/ en vereist Python 3.11 of hoger, versie 1.4.0 van gliner_app."}
+{"id": "gold-0033", "text": "L'Airbus A350 a été livré par Airbus à la compagnie Air France le 12 janvier 2026 à 08h45."}
+{"id": "gold-p-en-06", "text": "Lukas says his cousin Hana just moved to Utrecht for her new job at Vantra Dynamics. Her brother Idris is still in Antwerp, so he wants to visit both in May. Can you send Hana the train times from Utrecht Centraal?"}
+{"id": "gold-0052", "text": "Pope Francis, a Jesuit, addressed Catholics and Anglicans gathered near St. Peter's Square on Christmas morning."}
+{"id": "gold-0039", "text": "Upgrade to schema version 7 before 2026-12-01; the cutover window is 02:00-04:00 UTC, handled by the ops team at Cloudflare."}
+{"id": "gold-0028", "text": "Berlin unterzeichnete gestern ein Abkommen mit der Deutschen Bahn über neue Gleise."}
+{"id": "gold-p-de-08", "text": "Markus: Verena hat den Vertrag mit der Alpenmoos Software GmbH unterschrieben. Sie ist meine Teamkollegin im Datenschutz und arbeitet seit 2022 dort. Die Gründerin Elke Feurstein hat die Firma 2014 in Salzburg gegründet. Wir treffen uns Donnerstag um 14:00 Uhr im Raum Kaiser."}
+{"id": "gold-0018", "text": "Protestantse en katholieke gemeenschappen in Utrecht vieren het feest volgende week zaterdag om 20:00."}
+{"id": "gold-0024", "text": "Die Siemens AG wurde 1847 von Werner von Siemens in München gegründet."}

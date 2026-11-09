@@ -6,6 +6,9 @@ Subcommands (run with ``uv run python scripts/gold_tools.py <cmd> ...``):
   items      build annotation items + batches from gold-v2.1 texts and the passages
   parse      parse one raw annotator output, align strings to char offsets, flag problems
   agreement  inter-annotator agreement between two parsed outputs (A1 vs A2)
+  merge      merge A1/A2 aligned outputs: agreed items + keyed disagreements
+  show       print disagreements
+  adjudicate apply a decisions file to the merged file
   pool-cands extract pooling candidates from a prediction file against adjudicated gold
   build      turn the adjudicated file into eval/gold.jsonl (adds kind, split, categories)
   validate   check a gold file
@@ -391,6 +394,142 @@ def cmd_validate(args) -> None:
     sys.exit(1 if errs else 0)
 
 
+# ---------------------------------------------------------------- merge / adjudicate
+
+def ekey(e) -> str:
+    return f"E:{e['start']}-{e['end']}:{e['label']}"
+
+
+def pkey(p) -> str:
+    h, t = span(p["head"]), span(p["tail"])
+    if p["category"] in UNDIRECTED and t < h:
+        h, t = t, h
+    return f"P:{p['category']}:{h[0]}-{h[1]}:{t[0]}-{t[1]}"
+
+
+def merge_pair_sets(A: dict, B: dict, items: dict) -> dict:
+    """Merge two aligned annotator records for one item.
+
+    Agreed entities / pairs are accepted automatically. Everything else is a *disagreement* with a
+    stable key (``ekey``/``pkey``; qualifier-only differences get ``Q:<pkey>:<qualifier>``), which the
+    adjudication decisions file refers to.
+    """
+    ea = {(e["start"], e["end"], e["label"]): e for e in A["entities"]}
+    eb = {(e["start"], e["end"], e["label"]): e for e in B["entities"]}
+    agreed_e = [ea[k] for k in sorted(ea) if k in eb]
+    dis = {}
+    for k in sorted(set(ea) ^ set(eb)):
+        e = ea.get(k) or eb[k]
+        dis[ekey(e)] = {"kind": "entity", "by": ["A1" if k in ea else "A2"], "entity": e}
+    pa = {pkey(p): p for p in A["pairs"]}
+    pb = {pkey(p): p for p in B["pairs"]}
+    agreed_p = []
+    for k in sorted(set(pa) | set(pb)):
+        if k in pa and k in pb:
+            qa, qb = set(pa[k]["qualifiers"]), set(pb[k]["qualifiers"])
+            # same endpoints; directed pairs must also agree on direction (pkey is order-sensitive for place)
+            base = pa[k]
+            agreed_p.append({**base, "qualifiers": sorted(qa & qb, key=QUAL_ORDER.index)})
+            for q in sorted(qa ^ qb):
+                dis[f"Q:{k}:{q}"] = {"kind": "qualifier", "by": ["A1" if q in qa else "A2"], "pair": base, "qualifier": q}
+        else:
+            p = pa.get(k) or pb[k]
+            dis[k] = {"kind": "pair", "by": ["A1" if k in pa else "A2"], "pair": p}
+    return {"id": A["id"], "entities": agreed_e, "pairs": agreed_p, "disagreements": dis}
+
+
+def cmd_merge(args) -> None:
+    items = {r["id"]: r for r in read_jsonl(args.items)}
+    A = {}
+    B = {}
+    for f in args.a:
+        A.update({r["id"]: r for r in read_jsonl(f)})
+    for f in args.b:
+        B.update({r["id"]: r for r in read_jsonl(f)})
+    out = []
+    for i in items:
+        m = merge_pair_sets(A[i], B[i], items)
+        m.update({"lang": items[i]["lang"], "kind": items[i]["kind"], "text": items[i]["text"]})
+        out.append(m)
+    write_jsonl(args.out, out)
+    n = sum(len(m["disagreements"]) for m in out)
+    print(f"{len(out)} items merged, {n} disagreements in {sum(1 for m in out if m['disagreements'])} items")
+
+
+def apply_decisions(merged: list[dict], decisions: dict, extra_pairs: dict | None = None) -> list[dict]:
+    """Build adjudicated records. ``decisions``: {id: {"accept": [keys], "drop_agreed": [keys], "add": {...}}}.
+
+    accept       disagreement keys to accept (entities, pairs, qualifier additions)
+    drop_agreed  agreed entity/pair keys to remove (adjudicator overrides both annotators)
+    add_pairs    list of {category, head:{start,end}, tail:{start,end}, qualifiers, source?} to add directly
+    """
+    out = []
+    for m in merged:
+        d = decisions.get(m["id"], {})
+        acc = set(d.get("accept", []))
+        drop = set(d.get("drop_agreed", []))
+        ents = {(e["start"], e["end"]): e for e in m["entities"] if ekey(e) not in drop}
+        pairs = {pkey(p): {**p, "source": "annotator"} for p in m["pairs"] if pkey(p) not in drop}
+        for k, v in m["disagreements"].items():
+            if k not in acc:
+                continue
+            if v["kind"] == "entity":
+                ents[(v["entity"]["start"], v["entity"]["end"])] = v["entity"]
+            elif v["kind"] == "pair":
+                pairs[k] = {**v["pair"], "source": "annotator"}
+            else:
+                pk = k[2:].rsplit(":", 1)[0]
+                if pk in pairs:
+                    pairs[pk]["qualifiers"] = sorted(set(pairs[pk]["qualifiers"]) | {v["qualifier"]}, key=QUAL_ORDER.index)
+                else:
+                    pairs[pk] = {**v["pair"], "qualifiers": [v["qualifier"]], "source": "annotator"}
+        for p in d.get("add_pairs", []) + (extra_pairs or {}).get(m["id"], []):
+            for side in ("head", "tail"):
+                for e in m["entities"] + [x["entity"] for x in m["disagreements"].values() if x["kind"] == "entity"]:
+                    if (e["start"], e["end"]) == (p[side]["start"], p[side]["end"]):
+                        ents.setdefault((e["start"], e["end"]), e)
+                        p[side] = e
+            pairs[pkey(p)] = {**p, "source": p.get("source", "annotator")}
+        # pairs need their endpoint entities (take them from either annotator's disagreement list)
+        pool = {(x["entity"]["start"], x["entity"]["end"]): x["entity"] for x in m["disagreements"].values() if x["kind"] == "entity"}
+        final_pairs = []
+        for p in pairs.values():
+            if not p["qualifiers"]:
+                continue
+            for side in ("head", "tail"):
+                sp = (p[side]["start"], p[side]["end"])
+                if sp not in ents and sp in pool:
+                    ents[sp] = pool[sp]
+            final_pairs.append(p)
+        out.append({"id": m["id"], "lang": m["lang"], "kind": m["kind"], "text": m["text"],
+                    "entities": sorted(ents.values(), key=lambda e: (e["start"], e["end"])), "pairs": final_pairs})
+    return out
+
+
+def cmd_adjudicate(args) -> None:
+    merged = read_jsonl(args.merged)
+    decisions = json.loads(Path(args.decisions).read_text()) if Path(args.decisions).exists() else {}
+    extra = json.loads(Path(args.extra).read_text()) if args.extra and Path(args.extra).exists() else None
+    out = apply_decisions(merged, decisions, extra)
+    write_jsonl(args.out, out)
+    print(f"{len(out)} items, {sum(len(r['pairs']) for r in out)} pairs -> {args.out}")
+
+
+def cmd_show(args) -> None:
+    """Print disagreements readably for adjudication."""
+    for m in read_jsonl(args.merged):
+        if not m["disagreements"]:
+            continue
+        print(f"### {m['id']} [{m['lang']}] {m['text']}")
+        for k, v in m["disagreements"].items():
+            if v["kind"] == "entity":
+                e = v["entity"]
+                print(f"  {','.join(v['by'])} only  {k}  {e['text']!r}")
+            else:
+                p = v["pair"]
+                print(f"  {','.join(v['by'])} only  {k}  {p['head']['text']!r} -> {p['tail']['text']!r} {p['qualifiers'] if v['kind']=='pair' else v['qualifier']}")
+
+
 # ---------------------------------------------------------------- pool candidates
 
 def cmd_pool_cands(args) -> None:
@@ -469,6 +608,19 @@ def main() -> None:
     p.add_argument("--preds", required=True); p.add_argument("--adjudicated", required=True)
     p.add_argument("--cutoff", type=float, default=0.3); p.add_argument("--out", required=True)
     p.set_defaults(fn=cmd_pool_cands)
+    p = sub.add_parser("merge")
+    p.add_argument("--items", default=ROOT / "eval/annotation/items.jsonl")
+    p.add_argument("--a", nargs="+", required=True); p.add_argument("--b", nargs="+", required=True)
+    p.add_argument("--out", default=ROOT / "eval/annotation/merged.jsonl")
+    p.set_defaults(fn=cmd_merge)
+    p = sub.add_parser("show")
+    p.add_argument("--merged", default=ROOT / "eval/annotation/merged.jsonl")
+    p.set_defaults(fn=cmd_show)
+    p = sub.add_parser("adjudicate")
+    p.add_argument("--merged", default=ROOT / "eval/annotation/merged.jsonl")
+    p.add_argument("--decisions", default=ROOT / "eval/annotation/decisions.json")
+    p.add_argument("--extra"); p.add_argument("--out", default=ROOT / "eval/annotation/adjudicated.jsonl")
+    p.set_defaults(fn=cmd_adjudicate)
     p = sub.add_parser("build")
     p.add_argument("--adjudicated", default=ROOT / "eval/annotation/adjudicated.jsonl")
     p.add_argument("--out", default=ROOT / "eval/gold.jsonl")
