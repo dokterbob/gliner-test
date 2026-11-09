@@ -40,28 +40,28 @@ Each category has a `threshold`. It is `null` until tuned on the gold dev split 
 
 ## Design notes
 
-- **Three passes of three (v2.2).** The CoreML relation head is R4 and the bucket allows Q ≤ 8,
-  so relations run in passes of at most four. v2.2 groups them by pair category:
-  - `per_org`: employee_of, member_of, founder_of;
-  - `org_place`: subsidiary_of, located_in, resident_of;
-  - `per_per`: family, business_associate, personal_relation.
+- **Two passes of four (the v2.1 grouping, kept in v2.2).** The CoreML relation head is R4 and
+  the bucket allows Q ≤ 8, so relations run in passes of at most four:
+  - `affiliation`: employee_of, member_of, founder_of, subsidiary_of;
+  - `social_place`: family, business_associate, personal_relation, located_in.
 
-  With the entity pass, that is **four model calls per window, up from three** in v2.1 (passes
-  `affiliation` and `social_place`, four relations each; frozen in `schema/ontonotes-v2.1.json`).
-  The Experiments step measures v2.1 against v2.2 for accuracy and latency.
+  With the entity pass, that is **three model calls per window**. All engines run the same
+  passes, so they stay comparable.
 
-  All engines run the same passes, so they stay comparable. Measured prompt cost with
-  `windowing.py::measure_schema_cost`, using the model's own collator and empty text:
+  We also tried regrouping by pair category. The `per_org` / `org_place` / `per_per` passes,
+  three relations each and four calls per window, lost on every dev metric: pair F1 .634 vs
+  .672, AUPRC .498 vs .576, and +33% latency. See `docs/relation-accuracy.md`, experiment 01.
 
-  | pass | v2.1 tokens | v2.2 tokens |
-  |---|---|---|
-  | entities | 59 | 59 |
-  | `affiliation` / `per_org` | 60 | 45 |
-  | `social_place` / `org_place` | 57 | 46 |
-  | `per_per` | | 42 |
+  Measured prompt cost with `windowing.py::measure_schema_cost` (model collator, empty text):
 
-  Every pass is within the 65-token budget that `data/windows.jsonl` was sized for, so the
-  windows stay valid.
+  | pass | tokens |
+  |---|---|
+  | entities | 59 |
+  | `affiliation` | 60 |
+  | `social_place` | 57 |
+  | rejected v2.2 passes: `per_org` / `org_place` / `per_per` | 45 / 46 / 42 |
+
+  Every pass is within the 65-token budget that `data/windows.jsonl` was sized for.
 - **`name` vs `prompt`.** `name` is the canonical output id. `prompt` is the text sent to the
   model, and its wording is an experiment knob to tune on `eval/gold.jsonl`.
 - **Typed endpoints.** `head`/`tail` hold OntoNotes types. GLiNER2.5's `JointIE` decoder
@@ -74,8 +74,15 @@ Each category has a `threshold`. It is `null` until tuned on the gold dev split 
   employment with a start date) are a better fit for GLiNER2.5 records/structures later.
 - **Folded subtypes.** `located_in` merges three ACE subtypes that differ mainly by argument type.
   The specific Wikidata property (P131/P159/P276) can be derived from the endpoint types.
-- **`resident_of` promoted (v2.2).** Without it, person → place had no relation, so the `place`
-  category could not cover people.
+- **`resident_of` (v2.2) is a qualifier, not a prompt.** It is in the schema with prompt "lives in",
+  but its `pass` is `unassigned`, so it is not sent to the model.
+  - The `located_in` prompt already fires for "X lives in Y": 4 of the 6 gold resident pairs are
+    found that way.
+  - A separate "lives in" pass found no extra pair, added 3 false positives on dev and doubled
+    latency (experiment 13a).
+  - Instead, the `place` category's `qualifier_remap` relabels `located_in` as `resident_of` when
+    the head is a PERSON. On test this lifts qualifier top-1 from 26/36 to 29/36 and leaves pair
+    scores unchanged.
 - **Optional extensions** (`relations_optional` in the schema, not run): `owner_of`
   (ORG-AFF.Ownership/Investor-Shareholder, P127 inverse) and `alumnus_of` (ORG-AFF.Student-Alum,
   P69).
