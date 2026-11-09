@@ -1,0 +1,3 @@
+{"id": "05c-v21-qualifiers-noisyor", "desc": "baseline raw (01a), noisy-or over the category's own qualifier names only",
+ "schema": "schema/ontonotes-v2.1.json", "post_schema": "schema/ontonotes.json", "engine": "coreml-fp32", "raw": "01a-v21-baseline",
+ "flags": {}, "post": {"collapse": "noisy-or", "score_names": "qualifiers", "threshold": 0.5}}

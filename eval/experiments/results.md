@@ -2,14 +2,19 @@
 
 Cell format `tp/fp/fn`. All dev unless noted. overall = untyped, unordered pairs; macro = mean F1 over the 4 categories.
 
-| id | split | pool | thr | P | R | F1 | macro F1 | AUPRC | ECE | place F1 | per_per F1 | org_org F1 | per_org F1 | tp/fp/fn | qual acc | lat ms/win | desc |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 01a-v21-baseline | dev | y | 0.5 | 0.641 | 0.707 | 0.672 | 0.679 | 0.576 | 0.166 | 0.414 | 0.72 | 0.833 | 0.75 | 41/23/17 | 30/40 | 120.5 | BASELINE v2.1 grouping (3 calls), max collapse, thr 0.5 |
-| 01b-v22 | dev | y | 0.5 | 0.6 | 0.672 | 0.634 | 0.635 | 0.498 | 0.195 | 0.312 | 0.75 | 0.727 | 0.75 | 39/26/19 | 29/39 | 159.8 | v2.2 grouping (4 calls), max collapse, thr 0.5 |
-| 02-arg005 | dev | y | 0.5 | 0.424 | 0.724 | 0.535 | 0.527 | 0.545 | 0.219 | 0.471 | 0.545 | 0.533 | 0.56 | 42/57/16 | 31/41 | 120.8 | v2.1 grouping, --arg-threshold 0.05 |
-| 02-arg01 | dev | y | 0.5 | 0.545 | 0.724 | 0.622 | 0.64 | 0.571 | 0.194 | 0.438 | 0.6 | 0.833 | 0.689 | 42/35/16 | 30/39 | 120.1 | v2.1 grouping, --arg-threshold 0.1 |
-| 03a-coarse-only | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 0/0 | 79.1 | coarse-only detectors (located in/affiliated with/partner of/related to), 2 calls |
-| 03b-coarse-fine | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 15/23 | 159.4 | coarse + v2.1 fine passes; score = coarse detector only; fine = qualifiers |
-| 03c-coarse-fine-all | dev | y | 0.5 | 0.581 | 0.741 | 0.652 | 0.658 | 0.564 | 0.199 | 0.412 | 0.714 | 0.769 | 0.737 | 43/31/15 | 29/41 | 159.4 | same raw as 03b; score = max over coarse+fine names |
-| 03d-coarse-fine-noisyor | dev | y | 0.5 | 0.479 | 0.776 | 0.592 | 0.611 | 0.656 | 0.333 | 0.326 | 0.69 | 0.75 | 0.677 | 45/49/13 | 32/43 | 159.4 | same raw as 03b; noisy-or over all names |
-| 03e-coarse-only-b | dev | y | 0.5 | 0.78 | 0.552 | 0.646 | 0.622 | 0.513 | 0.12 | 0.4 | 0.632 | 0.667 | 0.791 | 32/9/26 | 0/0 | 78.4 | coarse-only wording b (based in/works for/affiliated with/relationship), 2 calls |
+| id | split | pool | thr | P | R | F1 | macro F1 | AUPRC | ECE | best global thr: F1 | place F1 | per_per F1 | org_org F1 | per_org F1 | tp/fp/fn | qual acc | lat ms/win | desc |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 01a-v21-baseline | dev | y | 0.5 | 0.641 | 0.707 | 0.672 | 0.679 | 0.576 | 0.166 | 0.6: 0.703 | 0.414 | 0.72 | 0.833 | 0.75 | 41/23/17 | 30/40 | 120.5 | BASELINE v2.1 grouping (3 calls), max collapse, thr 0.5 |
+| 01b-v22 | dev | y | 0.5 | 0.6 | 0.672 | 0.634 | 0.635 | 0.498 | 0.195 | 0.55: 0.667 | 0.312 | 0.75 | 0.727 | 0.75 | 39/26/19 | 29/39 | 159.8 | v2.2 grouping (4 calls), max collapse, thr 0.5 |
+| 02-arg005 | dev | y | 0.5 | 0.424 | 0.724 | 0.535 | 0.527 | 0.545 | 0.219 | 0.65: 0.622 | 0.471 | 0.545 | 0.533 | 0.56 | 42/57/16 | 31/41 | 120.8 | v2.1 grouping, --arg-threshold 0.05 |
+| 02-arg01 | dev | y | 0.5 | 0.545 | 0.724 | 0.622 | 0.64 | 0.571 | 0.194 | 0.65: 0.673 | 0.438 | 0.6 | 0.833 | 0.689 | 42/35/16 | 30/39 | 120.1 | v2.1 grouping, --arg-threshold 0.1 |
+| 03a-coarse-only | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.4: 0.633 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 0/0 | 79.1 | coarse-only detectors (located in/affiliated with/partner of/related to), 2 calls |
+| 03b-coarse-fine | dev | y | 0.5 | 0.774 | 0.414 | 0.539 | 0.439 | 0.446 | 0.203 | 0.4: 0.633 | 0.483 | 0.267 | 0.25 | 0.757 | 24/7/34 | 15/23 | 159.4 | coarse + v2.1 fine passes; score = coarse detector only; fine = qualifiers |
+| 03c-coarse-fine-all | dev | y | 0.5 | 0.581 | 0.741 | 0.652 | 0.658 | 0.564 | 0.199 | 0.65: 0.696 | 0.412 | 0.714 | 0.769 | 0.737 | 43/31/15 | 29/41 | 159.4 | same raw as 03b; score = max over coarse+fine names |
+| 03d-coarse-fine-noisyor | dev | y | 0.5 | 0.479 | 0.776 | 0.592 | 0.611 | 0.656 | 0.333 | 0.85: 0.7 | 0.326 | 0.69 | 0.75 | 0.677 | 45/49/13 | 32/43 | 159.4 | same raw as 03b; noisy-or over all names |
+| 03e-coarse-only-b | dev | y | 0.5 | 0.78 | 0.552 | 0.646 | 0.622 | 0.513 | 0.12 | 0.55: 0.66 | 0.4 | 0.632 | 0.667 | 0.791 | 32/9/26 | 0/0 | 78.4 | coarse-only wording b (based in/works for/affiliated with/relationship), 2 calls |
+| 04-v22-desc | dev | y | 0.5 | 0.578 | 0.638 | 0.607 | 0.605 | 0.476 | 0.17 | 0.4: 0.612 | 0.333 | 0.556 | 0.769 | 0.764 | 37/27/21 | 29/35 | 155.3 | v2.2 grouping + short relation descriptions (compare 01b) |
+| 05a-v21-noisyor | dev | y | 0.5 | 0.558 | 0.741 | 0.637 | 0.632 | 0.613 | 0.254 | 0.85: 0.667 | 0.364 | 0.741 | 0.714 | 0.71 | 43/34/15 | 31/42 | 120.5 | baseline raw (01a), noisy-or collapse over all names |
+| 05b-v21-qualifiers-only | dev | y | 0.5 | 0.678 | 0.69 | 0.684 | 0.69 | 0.577 | 0.178 | 0.6: 0.71 | 0.48 | 0.72 | 0.833 | 0.727 | 40/19/18 | 30/40 | 120.5 | baseline raw (01a), max over the category's own qualifier names only |
+| 05c-v21-qualifiers-noisyor | dev | y | 0.5 | 0.635 | 0.69 | 0.661 | 0.674 | 0.602 | 0.178 | 0.7: 0.679 | 0.48 | 0.692 | 0.833 | 0.69 | 40/23/18 | 30/40 | 120.5 | baseline raw (01a), noisy-or over the category's own qualifier names only |
+| 05d-v22-noisyor | dev | y | 0.5 | 0.519 | 0.69 | 0.593 | 0.582 | 0.581 | 0.273 | 0.75: 0.637 | 0.286 | 0.769 | 0.571 | 0.7 | 40/37/18 | 30/40 | 159.8 | v2.2 raw (01b), noisy-or |

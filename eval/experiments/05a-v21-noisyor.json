@@ -1,0 +1,3 @@
+{"id": "05a-v21-noisyor", "desc": "baseline raw (01a), noisy-or collapse over all names",
+ "schema": "schema/ontonotes-v2.1.json", "post_schema": "schema/ontonotes.json", "engine": "coreml-fp32", "raw": "01a-v21-baseline",
+ "flags": {}, "post": {"collapse": "noisy-or", "score_names": "all", "threshold": 0.5}}

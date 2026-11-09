@@ -44,10 +44,13 @@ def cmd_split(args):
     rel_tokens = 0
     pass_schemas = []
     for pn in pass_names:
-        prompts = [r.get("prompt", r["name"]) for r in cfg["relations"] if r.get("pass", "default") == pn]
-        if not prompts:
+        rels = [r for r in cfg["relations"] if r.get("pass", "default") == pn]
+        if not rels:
             continue
-        s = Schema().relations(prompts).build()
+        if any(r.get("description_short") for r in rels):  # experimental: prompt -> short description
+            s = Schema().relations({r.get("prompt", r["name"]): (r.get("description_short") or "") for r in rels}).build()
+        else:
+            s = Schema().relations([r.get("prompt", r["name"]) for r in rels]).build()
         pass_schemas.append(s)
         rel_tokens = max(rel_tokens, collator([("", s)]).input_ids.shape[1])
     budget = W.TOTAL_BUDGET - max(int(ent_tokens), int(rel_tokens)) - W.SCHEMA_SAFETY_MARGIN
