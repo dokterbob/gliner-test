@@ -70,6 +70,12 @@ def main() -> None:
     ap.add_argument("--optimizer", default="beam", choices=["beam", "greedy", "auto"])
     ap.add_argument("--include-symmetric", action="store_true",
                      help="also try the 3 PERSON<->PERSON symmetric relations, known to always come back empty (see comments)")
+    ap.add_argument("--symmetric-mode", choices=["skip", "undirected"], default="skip",
+                    help="skip (default): PERSON<->PERSON symmetric relations are not run (unless --include-symmetric). "
+                         "undirected: run them as `.relation(name, h, t, directed=False)` WITHOUT symmetric=True, which "
+                         "avoids the conflicting constraints that make symmetric=True always return empty in gliner2 2.0.0 "
+                         "(joint_ie/compiler.py:36,40; optimizers/base.py:139-164; constraints.py:136-139). "
+                         "All symmetric relations go into one extra schema/call.")
     args = ap.parse_args()
 
     entity_labels, relations, prompt_to_name, label_to_tag, threshold = load_schema(args.schema)
@@ -109,17 +115,26 @@ def main() -> None:
     asymmetric = [r for r in relations if not r.get("symmetric", False)]
     symmetric = [r for r in relations if r.get("symmetric", False)] if args.include_symmetric else []
 
-    def build_schema(rels):
+    def build_schema(rels, undirected=False):
         s = joint.create_schema().entities({label: {"threshold": threshold} for label in entity_labels})
         for r in rels:
-            s = s.relation(
-                r["prompt"], head=r["head_label_map"], tail=r["tail_label_map"],
-                symmetric=r.get("symmetric", False), threshold=threshold,
-            )
+            if undirected:
+                s = s.relation(
+                    r["prompt"], head=r["head_label_map"], tail=r["tail_label_map"],
+                    directed=False, threshold=threshold,
+                )
+            else:
+                s = s.relation(
+                    r["prompt"], head=r["head_label_map"], tail=r["tail_label_map"],
+                    symmetric=r.get("symmetric", False), threshold=threshold,
+                )
         return s
 
     schema_groups = [("asymmetric", build_schema(asymmetric))]
     schema_groups += [(r["name"], build_schema([r])) for r in symmetric]
+    if args.symmetric_mode == "undirected":
+        sym_all = [r for r in relations if r.get("symmetric", False)]
+        schema_groups.append(("symmetric-undirected", build_schema(sym_all, undirected=True)))
 
     config = JointIEConfig(optimizer=args.optimizer)
 

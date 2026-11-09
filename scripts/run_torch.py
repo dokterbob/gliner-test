@@ -38,6 +38,7 @@ out.
 import argparse
 import json
 import resource
+import sys
 import time
 from pathlib import Path
 
@@ -66,6 +67,25 @@ def peak_rss_mb() -> float:
     return raw / (1024.0 * 1024.0) if sys.platform == "darwin" else raw / 1024.0
 
 
+def apply_pair_generator_overrides(owner, arg_threshold, pair_cap, max_pair_cap=None):
+    """dataclasses.replace the frozen RelationProposalSettings on owner.relation_pair_generator
+    (re-read by the generator on every call)."""
+    import dataclasses
+
+    if arg_threshold is None and pair_cap is None:
+        return
+    if pair_cap is not None and max_pair_cap is not None and pair_cap > max_pair_cap:
+        raise SystemExit(f"--pair-cap {pair_cap} exceeds the maximum {max_pair_cap} supported by this engine")
+    gen = owner.relation_pair_generator
+    kw = {}
+    if arg_threshold is not None:
+        kw["argument_threshold"] = arg_threshold
+    if pair_cap is not None:
+        kw["pair_cap"] = pair_cap
+    gen.settings = dataclasses.replace(gen.settings, **kw)
+    print(f"[pair-generator] settings -> {gen.settings}", file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--schema", type=Path, default=Path("schema/ontonotes.json"))
@@ -76,6 +96,16 @@ def main() -> None:
     ap.add_argument("--limit", type=int, default=0, help="0 = all windows")
     ap.add_argument("--mode", default="multi-pass", choices=["one-pass", "multi-pass"],
                      help="multi-pass (default) mirrors scripts/run_coreml.py's entities-then-per-relation-pass split")
+    ap.add_argument("--relation-threshold", type=float, default=None,
+                    help="threshold for the relation passes only (default: schema `threshold`; entities always use the "
+                         "schema threshold). 0.0 keeps every scored pair. Note: gliner2 gates per pair at this threshold "
+                         "and runs dedup AFTER it, so lowering it can also shift which of two overlapping pairs "
+                         "survives dedup, not just add pairs.")
+    ap.add_argument("--arg-threshold", type=float, default=None,
+                    help="relation_pair_generator argument_threshold (default 0.2 from the model config): minimum "
+                         "head/tail entity-candidate score for a span to be proposed as a pair endpoint")
+    ap.add_argument("--pair-cap", type=int, default=None,
+                    help="relation_pair_generator pair_cap (default 64)")
     args = ap.parse_args()
 
     entity_labels, prompts_by_pass, all_prompts, prompt_to_name, label_to_tag, threshold = load_schema(args.schema)
@@ -102,6 +132,9 @@ def main() -> None:
     load_ms = (time.perf_counter() - t0) * 1000.0
     print(f"[run_torch] loaded in {load_ms:.1f} ms")
 
+    apply_pair_generator_overrides(model, args.arg_threshold, args.pair_cap)
+    rel_threshold = threshold if args.relation_threshold is None else args.relation_threshold
+    print(f"[run_torch] entity threshold={threshold} relation threshold={rel_threshold}")
     multi_pass = args.mode == "multi-pass"
     if multi_pass:
         ent_schema = model.create_schema().entities(entity_labels)
@@ -136,7 +169,7 @@ def main() -> None:
                     relations_src = {}
                     for _pass_name, rel_schema in rel_schemas:
                         rel_result = model.extract(
-                            text, rel_schema, threshold=threshold,
+                            text, rel_schema, threshold=rel_threshold,
                             include_confidence=True, include_spans=True,
                         )
                         relations_src.update(rel_result.get("relation_extraction", {}))

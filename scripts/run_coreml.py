@@ -97,7 +97,8 @@ def load_schemas(schema_path: Path, Schema):
     return ent_schema, relation_pass_schemas, label_to_tag, threshold
 
 
-def extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, text):
+def extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, text, rel_threshold=None):
+    rel_threshold = threshold if rel_threshold is None else rel_threshold
     t0 = time.perf_counter()
     ent_out = runtime.extract(text, ent_schema, threshold=threshold, include_confidence=True, include_spans=True)
 
@@ -111,7 +112,7 @@ def extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, thr
 
     relations = []
     for _pass_name, rel_schema, prompt_to_name in relation_pass_schemas:
-        rel_out = runtime.extract(text, rel_schema, threshold=threshold, include_confidence=True, include_spans=True)
+        rel_out = runtime.extract(text, rel_schema, threshold=rel_threshold, include_confidence=True, include_spans=True)
         for prompt, pairs in rel_out.get("relation_extraction", {}).items():
             name = prompt_to_name.get(prompt, prompt)
             for p in pairs:
@@ -129,6 +130,25 @@ def extract_window(runtime, ent_schema, relation_pass_schemas, label_to_tag, thr
     return entities, relations, latency_ms
 
 
+def apply_pair_generator_overrides(owner, arg_threshold, pair_cap, max_pair_cap=None):
+    """dataclasses.replace the frozen RelationProposalSettings on owner.relation_pair_generator
+    (re-read by the generator on every call)."""
+    import dataclasses
+
+    if arg_threshold is None and pair_cap is None:
+        return
+    if pair_cap is not None and max_pair_cap is not None and pair_cap > max_pair_cap:
+        raise SystemExit(f"--pair-cap {pair_cap} exceeds the maximum {max_pair_cap} supported by this engine")
+    gen = owner.relation_pair_generator
+    kw = {}
+    if arg_threshold is not None:
+        kw["argument_threshold"] = arg_threshold
+    if pair_cap is not None:
+        kw["pair_cap"] = pair_cap
+    gen.settings = dataclasses.replace(gen.settings, **kw)
+    print(f"[pair-generator] settings -> {gen.settings}", file=sys.stderr)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--model-dir", type=Path, default=None, help="defaults to .cache/coreml/<revision>")
@@ -139,6 +159,17 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--relation-threshold", type=float, default=None,
+                    help="threshold for the relation passes only (default: schema `threshold`; entities always use the "
+                         "schema threshold). 0.0 keeps every scored pair. Note: gliner2 gates per pair at this threshold "
+                         "and runs dedup AFTER it, so lowering it can also shift which of two overlapping pairs "
+                         "survives dedup, not just add pairs.")
+    ap.add_argument("--arg-threshold", type=float, default=None,
+                    help="relation_pair_generator argument_threshold (default 0.2 from the model config): minimum "
+                         "head/tail entity-candidate score for a span to be proposed as a pair endpoint")
+    ap.add_argument("--pair-cap", type=int, default=None,
+                    help="relation_pair_generator pair_cap (default 64) ; CoreML relation package is P256=R4x64 so must be <= 64")
+
     ap.add_argument("--progress-every", type=int, default=200)
     args = ap.parse_args()
 
@@ -156,6 +187,9 @@ def main() -> None:
     from gliner2 import Schema  # noqa: E402  (import after sys.path insert in build_runtime)
 
     ent_schema, relation_pass_schemas, label_to_tag, threshold = load_schemas(args.schema, Schema)
+    apply_pair_generator_overrides(runtime, args.arg_threshold, args.pair_cap, max_pair_cap=64)
+    rel_threshold = threshold if args.relation_threshold is None else args.relation_threshold
+    print(f"[run_coreml] entity threshold={threshold} relation threshold={rel_threshold}", file=sys.stderr)
     load_ms = (time.perf_counter() - load_t0) * 1000
     print(f"[run_coreml] loaded {args.precision}/{args.compute_units} in {load_ms:.0f} ms", file=sys.stderr)
 
@@ -171,7 +205,7 @@ def main() -> None:
     with out.open("w") as fout:
         for w in windows:
             entities, relations, latency_ms = extract_window(
-                runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, w["text"]
+                runtime, ent_schema, relation_pass_schemas, label_to_tag, threshold, w["text"], rel_threshold
             )
             fout.write(
                 json.dumps(
