@@ -1,7 +1,7 @@
 [project]
 name = "gliner-test"
 version = "0.1.0"
-description = "Add your description here"
+description = "Test drive of GLiNER2.5 NER + relation extraction (CoreML, gliner25-rs, PyTorch) for localdb"
 authors = [
     { name = "dokterbob-agent[bot]", email = "4322994+dokterbob-agent[bot]@users.noreply.github.com" }
 ]
